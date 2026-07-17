@@ -1,0 +1,73 @@
+PHASE | Achilles Rehab Foundation | minimum 6 weeks | sequence every 1 day | morning | push | manual
+REVIEW | Has morning soreness remained stable or improved for two weeks and have all exercises remained at 3 out of 10 pain or less?
+DAY 1 | Heavy Strength
+EXERCISE | Straight-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Bent-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Single-Leg Balance | 3 sets x 45 seconds per leg | required | Maintain steady balance without touching down
+EXERCISE | Toe Yoga | 2 minutes | required | Move the big toe independently from the other toes
+EXERCISE | Foot Doming | 2 sets x 15 reps | required | Keep toes relaxed while raising the arch
+DAY 2 | Recovery
+EXERCISE | Easy Walk or Easy Bike | 20-30 minutes at an easy pace | required | Keep intensity comfortable
+EXERCISE | Single-Leg Balance | 3 sets x 45 seconds per leg | required | Maintain steady balance without touching down
+EXERCISE | Foam Roll Calf Muscles | 2-3 minutes | required | Roll the calf muscles only and avoid the Achilles tendon
+EXERCISE | Isometric Single-Leg Calf Hold | 5 sets x 45 seconds per leg | conditional | Perform only if the Achilles feels sore or stiff
+DAY 3 | Heavy Strength
+EXERCISE | Straight-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Bent-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Single-Leg Balance | 3 sets x 45 seconds per leg | required | Maintain steady balance without touching down
+EXERCISE | Toe Yoga | 2 minutes | required | Move the big toe independently from the other toes
+EXERCISE | Foot Doming | 2 sets x 15 reps | required | Keep toes relaxed while raising the arch
+DAY 4 | Recovery
+EXERCISE | Easy Walk or Easy Bike | 20-30 minutes at an easy pace | required | Keep intensity comfortable
+EXERCISE | Single-Leg Balance | 3 sets x 45 seconds per leg | required | Maintain steady balance without touching down
+EXERCISE | Foam Roll Calf Muscles | 2-3 minutes | required | Roll the calf muscles only and avoid the Achilles tendon
+EXERCISE | Isometric Single-Leg Calf Hold | 5 sets x 45 seconds per leg | conditional | Perform only if the Achilles feels sore or stiff
+DAY 5 | Heavy Strength
+EXERCISE | Straight-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Bent-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Single-Leg Balance | 3 sets x 45 seconds per leg | required | Maintain steady balance without touching down
+EXERCISE | Toe Yoga | 2 minutes | required | Move the big toe independently from the other toes
+EXERCISE | Foot Doming | 2 sets x 15 reps | required | Keep toes relaxed while raising the arch
+DAY 6 | Recovery
+EXERCISE | Easy Walk or Easy Bike | 20-30 minutes at an easy pace | required | Keep intensity comfortable
+EXERCISE | Single-Leg Balance | 3 sets x 45 seconds per leg | required | Maintain steady balance without touching down
+EXERCISE | Foam Roll Calf Muscles | 2-3 minutes | required | Roll the calf muscles only and avoid the Achilles tendon
+EXERCISE | Isometric Single-Leg Calf Hold | 5 sets x 45 seconds per leg | conditional | Perform only if the Achilles feels sore or stiff
+DAY 7 | Rest Day
+END PHASE
+
+PHASE | Pogo Progression | minimum 2 weeks | sequence every 1 day | morning | push | manual
+REVIEW | Were all pogo hop sessions pain free during exercise and no worse the following morning?
+DAY 1 | Strength and Pogo Hops
+EXERCISE | Straight-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Bent-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Two-Leg Pogo Hops | 3 sets x 20 reps | required | Stay light and springy and stop if pain increases
+DAY 2 | Recovery
+EXERCISE | Easy Walk or Easy Bike | 20-30 minutes at an easy pace | required | Keep intensity comfortable
+EXERCISE | Isometric Single-Leg Calf Hold | 5 sets x 45 seconds per leg | conditional | Perform only if the Achilles feels sore or stiff
+DAY 3 | Rest Day
+END PHASE
+
+PHASE | Single-Leg Pogo Progression | minimum 2 weeks | sequence every 1 day | morning | push | manual
+REVIEW | Were all single leg pogo hop sessions pain free during exercise and no worse the following morning?
+DAY 1 | Strength and Single-Leg Pogo Hops
+EXERCISE | Straight-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Bent-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Single-Leg Pogo Hops | 3 sets x 15 reps per leg | required | Stay light and stop if pain increases
+DAY 2 | Recovery
+EXERCISE | Easy Walk or Easy Bike | 20-30 minutes at an easy pace | required | Keep intensity comfortable
+EXERCISE | Isometric Single-Leg Calf Hold | 5 sets x 45 seconds per leg | conditional | Perform only if the Achilles feels sore or stiff
+DAY 3 | Rest Day
+END PHASE
+
+PHASE | Jump Progression | minimum 2 weeks | sequence every 1 day | morning | push | manual
+REVIEW | Were all jump sessions pain free during exercise and no worse the following morning?
+DAY 1 | Strength and Jump Training
+EXERCISE | Straight-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Bent-Knee Single-Leg Calf Raise | 4 sets x 6-8 reps per leg | required | Use heavy weight and lower for 3 seconds
+EXERCISE | Submaximal Vertical Jumps | 3 sets x 8 reps at 50-70 percent effort | required | Land softly and stop if pain increases
+DAY 2 | Recovery
+EXERCISE | Easy Walk or Easy Bike | 20-30 minutes at an easy pace | required | Keep intensity comfortable
+EXERCISE | Isometric Single-Leg Calf Hold | 5 sets x 45 seconds per leg | conditional | Perform only if the Achilles feels sore or stiff
+DAY 3 | Rest Day
+END PHASE

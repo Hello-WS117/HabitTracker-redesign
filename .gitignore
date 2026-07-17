@@ -1,0 +1,17 @@
+local.properties
+*.jks
+*.keystore
+*.keystore.lock
+.gradle/
+.kotlin/
+build/
+app/build/
+.idea/
+*.iml
+*.apk
+*.aab
+*.ap_
+*.hprof
+captures/
+device-acceptance/
+tmp/
