@@ -419,6 +419,7 @@ class HabitTrackerRolloverConnectedTest {
 
         compose.onNodeWithTag("settings-list")
             .performScrollToNode(hasTestTag("settings-backup-button"))
+        compose.onNodeWithTag("settings-app-version").assertIsDisplayed()
         compose.onNodeWithTag("settings-backup-button").assertIsDisplayed()
         compose.onNodeWithTag("settings-restore-button").assertIsDisplayed()
         assertTagExists("settings-backup-status")

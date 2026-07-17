@@ -46,8 +46,16 @@ internal object AutoBackupRunner {
 object AutoBackupHandler {
     suspend fun run(context: Context) {
         val appContext = context.applicationContext
-        val settings = AppSettingsRepository(appContext).settings.first()
+        val settingsRepository = AppSettingsRepository(appContext)
+        val settings = settingsRepository.settings.first()
         if (!settings.autoBackupEnabled || settings.autoBackupFolderUri.isBlank()) return
+        if (!AutoBackupScheduler.hasPersistedWritePermission(appContext, settings.autoBackupFolderUri)) {
+            settingsRepository.recordAutoBackupFailure(
+                timestamp = LocalDateTime.now().toString(),
+                reason = "Folder permission expired; choose the folder again",
+            )
+            throw SecurityException("Auto backup folder permission expired")
+        }
         BackupRepository(appContext)
             .exportToAutoBackupFolder(Uri.parse(settings.autoBackupFolderUri))
             .getOrThrow()
@@ -98,7 +106,7 @@ object AutoBackupScheduler {
         return Duration.between(now, nextRun).toMillis().coerceAtLeast(0)
     }
 
-    private fun hasPersistedWritePermission(context: Context, folderUri: String): Boolean {
+    internal fun hasPersistedWritePermission(context: Context, folderUri: String): Boolean {
         val uri = runCatching { Uri.parse(folderUri) }.getOrNull() ?: return false
         return context.contentResolver.persistedUriPermissions.any {
             it.uri == uri && it.isWritePermission

@@ -15,6 +15,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.room.withTransaction
 import com.example.habittracker.backup.BackupRepository
 import com.example.habittracker.backup.PreparedManualBackup
+import com.example.habittracker.backup.backupFailureUserLabel
 import com.example.habittracker.data.CycleRestartBehavior
 import com.example.habittracker.data.CycleRestartTiming
 import com.example.habittracker.data.ExerciseCheckStatus
@@ -81,19 +82,7 @@ internal fun backupByteCountLabel(byteCount: Long): String {
 }
 
 internal fun backupFailureLabel(error: Throwable): String {
-    val message = error.message.orEmpty()
-    return when {
-        error is SecurityException -> "folder permission expired"
-        message.contains("empty", ignoreCase = true) -> "destination stayed empty"
-        message.contains("file size", ignoreCase = true) -> "destination reported the wrong size"
-        message.contains("did not match", ignoreCase = true) -> "destination changed the backup data"
-        message.contains("incomplete", ignoreCase = true) -> "destination did not finish uploading"
-        message.contains("could not create", ignoreCase = true) -> "destination could not create the backup file"
-        message.contains("rejected the write", ignoreCase = true) -> "destination rejected the backup write"
-        message.contains("read back", ignoreCase = true) -> "destination could not verify the uploaded file"
-        message.contains("Could not open", ignoreCase = true) -> "destination could not be opened"
-        else -> "provider write failed"
-    }
+    return backupFailureUserLabel(error)
 }
 
 internal fun manualBackupFailureStatus(error: Throwable): String {
@@ -2245,7 +2234,7 @@ class HabitTrackerUiStore(
             return null
         }
         preparedManualBackup = null
-        backupStatus = "Uploading and verifying backup..."
+        backupStatus = "Uploading and verifying backup (Drive can take up to 1 minute)..."
         return scope?.launch {
             val result = activeRepository.exportPreparedManualBackup(uri, prepared)
             if (result.isSuccess) reloadSettings()
@@ -2276,7 +2265,15 @@ class HabitTrackerUiStore(
             backupStatus = "Choose an auto backup folder first"
             return null
         }
-        backupStatus = "Uploading and verifying auto backup..."
+        val context = appContext ?: run {
+            backupStatus = "Auto backup unavailable"
+            return null
+        }
+        if (!AutoBackupScheduler.hasPersistedWritePermission(context, folderUri)) {
+            backupStatus = "Auto backup failed: folder permission expired; choose the folder again"
+            return null
+        }
+        backupStatus = "Uploading and verifying auto backup (Drive can take up to 1 minute)..."
         return scope?.launch {
             val result = activeRepository.exportToAutoBackupFolder(Uri.parse(folderUri))
             reloadSettings()

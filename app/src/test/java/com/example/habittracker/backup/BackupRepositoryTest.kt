@@ -77,6 +77,7 @@ class BackupRepositoryTest {
             settingsRepository = settingsRepository,
             json = json,
             verificationRetryDelaysMillis = emptyList(),
+            modeSwitchVerificationRetryDelaysMillis = emptyList(),
         )
     }
 
@@ -566,12 +567,77 @@ class BackupRepositoryTest {
             settingsRepository = settingsRepository,
             json = json,
             verificationRetryDelaysMillis = listOf(0L),
+            modeSwitchVerificationRetryDelaysMillis = listOf(0L),
         )
 
         val result = retryingRepository.exportToUri(uri)
 
         assertTrue(result.isSuccess)
         assertTrue(result.getOrThrow().byteCount > 0)
+    }
+
+    @Test
+    fun exportToUriFallsBackAcrossProviderWriteModes() = runTest {
+        seedExistingDatabase()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://com.google.android.apps.docs.storage/document/backup.json")
+        val streamGateway = RecordingBackupStreamGateway(
+            rejectedWriteModes = setOf("wt", "rwt"),
+        )
+        val providerCompatibleRepository = repositoryWithGateway(
+            context = context,
+            gateway = RecordingBackupDocumentGateway(supportsRename = false),
+            streamGateway = streamGateway,
+        )
+
+        val result = providerCompatibleRepository.exportToUri(uri)
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf("wt", "rwt", "w"), streamGateway.attemptedWriteModes)
+        assertEquals(result.getOrThrow().byteCount, streamGateway.writtenBytes.size)
+    }
+
+    @Test
+    fun exportToUriRetriesAnotherModeWhenProviderSilentlyLeavesFirstWriteEmpty() = runTest {
+        seedExistingDatabase()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://com.google.android.apps.docs.storage/document/silent-empty.json")
+        val streamGateway = RecordingBackupStreamGateway(
+            discardedWriteModes = setOf("wt"),
+        )
+        val providerCompatibleRepository = repositoryWithGateway(
+            context = context,
+            gateway = RecordingBackupDocumentGateway(supportsRename = false),
+            streamGateway = streamGateway,
+        )
+
+        val result = providerCompatibleRepository.exportToUri(uri)
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf("wt", "rwt"), streamGateway.attemptedWriteModes)
+        assertEquals(result.getOrThrow().byteCount, streamGateway.writtenBytes.size)
+    }
+
+    @Test
+    fun exportToUriAcceptsExactValidatedReadbackWhenProviderMetadataRemainsStale() = runTest {
+        seedExistingDatabase()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://com.google.android.apps.docs.storage/document/delayed-metadata.json")
+        val streamGateway = RecordingBackupStreamGateway()
+        val providerCompatibleRepository = repositoryWithGateway(
+            context = context,
+            gateway = RecordingBackupDocumentGateway(
+                supportsRename = false,
+                metadataSize = 0L,
+                isPartial = true,
+            ),
+            streamGateway = streamGateway,
+        )
+
+        val result = providerCompatibleRepository.exportToUri(uri)
+
+        assertTrue(result.isSuccess)
+        assertEquals(result.getOrThrow().byteCount, streamGateway.writtenBytes.size)
     }
 
     @Test
@@ -641,7 +707,7 @@ class BackupRepositoryTest {
         assertTrue(pendingOutput.toByteArray().contentEquals(finalOutput.toByteArray()))
         assertEquals(
             listOf(
-                "personal_scheduler_backup_v1_20260520-120000.json.pending",
+                "personal_scheduler_backup_v1_20260520-120000.pending.json",
                 "personal_scheduler_backup_v1_20260520-120000.json",
             ),
             gateway.createdDisplayNames,
@@ -705,7 +771,7 @@ class BackupRepositoryTest {
         assertEquals(renamedUri, result.getOrThrow().uri)
         assertEquals(1, gateway.renameCalls)
         assertEquals(
-            listOf("personal_scheduler_backup_v1_20260520-120000.json.pending"),
+            listOf("personal_scheduler_backup_v1_20260520-120000.pending.json"),
             gateway.createdDisplayNames,
         )
         assertTrue(gateway.deletedUris.isEmpty())
@@ -896,6 +962,7 @@ class BackupRepositoryTest {
     private fun repositoryWithGateway(
         context: Context,
         gateway: BackupDocumentGateway,
+        streamGateway: BackupStreamGateway = AndroidBackupStreamGateway(context.contentResolver),
     ): BackupRepository {
         return BackupRepository(
             context = context,
@@ -903,7 +970,9 @@ class BackupRepositoryTest {
             settingsRepository = settingsRepository,
             json = json,
             verificationRetryDelaysMillis = emptyList(),
+            modeSwitchVerificationRetryDelaysMillis = emptyList(),
             documentGateway = gateway,
+            streamGateway = streamGateway,
         )
     }
 
@@ -912,6 +981,8 @@ class BackupRepositoryTest {
         private val supportsRename: Boolean,
         private val renameResult: Uri? = null,
         private val renameFailure: Throwable? = null,
+        private val metadataSize: Long? = null,
+        private val isPartial: Boolean = false,
     ) : BackupDocumentGateway {
         val createdDisplayNames = mutableListOf<String>()
         val deletedUris = mutableListOf<Uri>()
@@ -936,10 +1007,34 @@ class BackupRepositoryTest {
 
         override fun metadata(documentUri: Uri): BackupDocumentMetadata {
             return BackupDocumentMetadata(
-                size = null,
-                isPartial = false,
+                size = metadataSize,
+                isPartial = isPartial,
                 supportsRename = supportsRename,
             )
+        }
+    }
+
+    private class RecordingBackupStreamGateway(
+        private val rejectedWriteModes: Set<String> = emptySet(),
+        private val discardedWriteModes: Set<String> = emptySet(),
+    ) : BackupStreamGateway {
+        private val output = ByteArrayOutputStream()
+        val attemptedWriteModes = mutableListOf<String>()
+        val writtenBytes: ByteArray
+            get() = output.toByteArray()
+
+        override fun openOutputStream(documentUri: Uri, mode: String): OutputStream? {
+            attemptedWriteModes += mode
+            if (mode in rejectedWriteModes) {
+                throw UnsupportedOperationException("Mode $mode is not supported")
+            }
+            if (mode in discardedWriteModes) return ByteArrayOutputStream()
+            output.reset()
+            return output
+        }
+
+        override fun openInputStream(documentUri: Uri): InputStream {
+            return ByteArrayInputStream(output.toByteArray())
         }
     }
 

@@ -22,7 +22,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Restore `docs/redesign/demo/habittracker-redesign-demo-v1.json` from **Settings > Restore from file** to populate every major task type and workflow state.
 
-An owner-signed reference APK is attached to the [`v1.0.50` release](https://github.com/Hello-WS117/HabitTracker-redesign/releases/tag/v1.0.50). It is provided so a designer can inspect the current app without configuring a build environment.
+An owner-signed reference APK is attached to the [`v1.0.51` release](https://github.com/Hello-WS117/HabitTracker-redesign/releases/tag/v1.0.51). It is provided so a designer can inspect the current app without configuring a build environment.
 
 ## Safety And Scope
 

@@ -2,6 +2,8 @@ package com.example.habittracker.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import com.example.habittracker.backup.BackupFailureStage
+import com.example.habittracker.backup.BackupOperationException
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -50,6 +52,20 @@ class SettingsDocumentLaunchTest {
         assertEquals(
             "Backup failed: destination stayed empty",
             manualBackupFailureStatus(IllegalStateException("Backup file was empty after writing")),
+        )
+    }
+
+    @Test
+    fun backupStatusReportsTheExactProviderStageInsteadOfAGenericFailure() {
+        val error = BackupOperationException(
+            stage = BackupFailureStage.WRITE_DESTINATION,
+            message = "All provider modes failed",
+            cause = UnsupportedOperationException("Provider-specific failure"),
+        )
+
+        assertEquals(
+            "Backup failed: destination rejected every supported write mode",
+            manualBackupFailureStatus(error),
         )
     }
 

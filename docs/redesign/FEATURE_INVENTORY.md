@@ -1,6 +1,6 @@
 # Current Feature Inventory
 
-This document describes the user-visible behavior of HabitTracker version 1.0.50. It is a preservation contract for a UI redesign, not a proposal for new behavior.
+This document describes the user-visible behavior of HabitTracker version 1.0.51. It is a preservation contract for a UI redesign, not a proposal for new behavior.
 
 ## Product Model
 
@@ -335,6 +335,7 @@ The Settings destination includes:
 - Exact-alarm and notification permission status/actions.
 - Manual backup and restore.
 - Automatic backup enable switch, interval in days, and Android document-tree folder selection.
+- Installed app version, verified backup size, and actionable provider-failure status.
 
 ## Backup And Restore
 
@@ -344,7 +345,8 @@ The Settings destination includes:
 - Automatic backup uses a user-selected document-tree folder and WorkManager with retry backoff after provider failures.
 - Automatic backup verifies a `.pending` document first, uses atomic rename when supported, and otherwise writes and verifies a final copy before deleting the pending document.
 - A backup includes tasks, rules, occurrences, logs, sequences, exercises, exercise checks, routine plans/phases, auto-restart data, and settings.
-- Every backup write is read back, checked for non-zero size, exact byte and provider-size equality, parseability, and schema validity.
+- Every backup write is read back and checked for non-zero size, exact byte equality, parseability, and schema validity. Cloud-provider size/partial metadata is allowed a commit window and cannot override an exact validated readback if it remains stale.
+- Backup writes retry complete write-and-readback cycles across Android provider modes when a provider rejects a mode or silently exposes an empty file.
 - A verified app-private safety copy is retained before each external export.
 - Settings reports the last verified byte size and the latest automatic-backup failure reason, and allows an immediate folder backup.
 - Restore validates size, IDs, references, dates, enum values, sequence positions, and status relationships before replacing data.

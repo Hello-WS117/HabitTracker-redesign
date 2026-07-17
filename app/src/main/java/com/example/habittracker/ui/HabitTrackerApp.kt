@@ -31,6 +31,7 @@ import com.example.habittracker.data.PhaseAdvanceMode
 import com.example.habittracker.data.RoutinePhaseStatus
 import com.example.habittracker.data.SkipBlockedDaysBehavior
 import com.example.habittracker.data.TaskTimeOfDay
+import com.example.habittracker.workers.AutoBackupScheduler
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -4795,6 +4796,11 @@ private fun SettingsScreen(store: HabitTrackerUiStore) {
     val appContext = context.applicationContext
     val scope = rememberCoroutineScope()
     val backupRepository = remember(appContext) { BackupRepository(appContext) }
+    val appVersionName = remember(context) {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull().orEmpty()
+    }
     var exactAlarmGranted by remember { mutableStateOf(hasExactAlarmAccess(context)) }
     var notificationGranted by remember { mutableStateOf(hasNotificationAccess(context)) }
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
@@ -4842,13 +4848,18 @@ private fun SettingsScreen(store: HabitTrackerUiStore) {
             runCatching {
                 context.contentResolver.takePersistableUriPermission(uri, permissionFlags)
             }
-            store.updateSettings {
-                it.copy(
-                    autoBackupEnabled = true,
-                    autoBackupFolderUri = uri.toString(),
-                )
+            val permissionPersisted = AutoBackupScheduler.hasPersistedWritePermission(context, uri.toString())
+            if (permissionPersisted) {
+                store.updateSettings {
+                    it.copy(
+                        autoBackupEnabled = true,
+                        autoBackupFolderUri = uri.toString(),
+                    )
+                }
+                store.backupStatus = "Auto backup folder selected"
+            } else {
+                store.backupStatus = "Folder permission was not retained; choose the folder again"
             }
-            store.backupStatus = "Auto backup folder selected"
         } else {
             store.backupStatus = "Auto backup folder not selected"
         }
@@ -5019,6 +5030,12 @@ private fun SettingsScreen(store: HabitTrackerUiStore) {
 
         item {
             SettingsCard("Backup and restore") {
+                Text(
+                    text = "Installed app: v$appVersionName",
+                    modifier = Modifier.testTag("settings-app-version"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(
                     text = "Format: personal_scheduler_backup_v1_YYYYMMDD-HHMMSS.json",
                     style = MaterialTheme.typography.bodyMedium,
