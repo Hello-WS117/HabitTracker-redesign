@@ -88,7 +88,9 @@ internal fun backupFailureLabel(error: Throwable): String {
         message.contains("file size", ignoreCase = true) -> "destination reported the wrong size"
         message.contains("did not match", ignoreCase = true) -> "destination changed the backup data"
         message.contains("incomplete", ignoreCase = true) -> "destination did not finish uploading"
-        message.contains("finalize", ignoreCase = true) -> "destination could not finalize the file"
+        message.contains("could not create", ignoreCase = true) -> "destination could not create the backup file"
+        message.contains("rejected the write", ignoreCase = true) -> "destination rejected the backup write"
+        message.contains("read back", ignoreCase = true) -> "destination could not verify the uploaded file"
         message.contains("Could not open", ignoreCase = true) -> "destination could not be opened"
         else -> "provider write failed"
     }
@@ -2222,7 +2224,7 @@ class HabitTrackerUiStore(
                 onSuccess = { prepared ->
                     preparedManualBackup = prepared
                     backupStatus = "Backup prepared: ${backupByteCountLabel(prepared.byteCount.toLong())}"
-                    launchDocument(prepared.pendingDisplayName)
+                    launchDocument(prepared.finalDisplayName)
                 },
                 onFailure = { error ->
                     preparedManualBackup = null

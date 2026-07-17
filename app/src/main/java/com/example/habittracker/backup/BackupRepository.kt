@@ -3,7 +3,7 @@ package com.example.habittracker.backup
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
-import android.provider.OpenableColumns
+import android.util.Log
 import androidx.room.withTransaction
 import com.example.habittracker.data.LogAction
 import com.example.habittracker.data.local.CompletionLogEntity
@@ -37,12 +37,11 @@ data class BackupExportReceipt(
 
 class PreparedManualBackup internal constructor(
     val finalDisplayName: String,
-    val pendingDisplayName: String,
     val byteCount: Int,
     internal val stagedFile: File,
 )
 
-class BackupRepository(
+class BackupRepository internal constructor(
     private val context: Context,
     private val database: HabitDatabase = HabitDatabase.get(context),
     private val settingsRepository: AppSettingsRepository = AppSettingsRepository(context),
@@ -54,6 +53,7 @@ class BackupRepository(
     private val maxBackupBytes: Int = MAX_BACKUP_BYTES,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val verificationRetryDelaysMillis: List<Long> = DEFAULT_VERIFICATION_RETRY_DELAYS_MILLIS,
+    private val documentGateway: BackupDocumentGateway = AndroidBackupDocumentGateway(context.contentResolver),
 ) {
     private val dao = database.habitDao()
 
@@ -84,7 +84,6 @@ class BackupRepository(
                 Result.success(
                     PreparedManualBackup(
                         finalDisplayName = manualBackupFileName(timestamp),
-                        pendingDisplayName = manualBackupPendingFileName(timestamp),
                         byteCount = encodedBytes.size,
                         stagedFile = stagedFile,
                     ),
@@ -109,26 +108,18 @@ class BackupRepository(
         prepared: PreparedManualBackup,
         timestamp: LocalDateTime = LocalDateTime.now(),
     ): Result<BackupExportReceipt> = withContext(ioDispatcher) {
-        var cleanupUri: Uri? = uri
         try {
             val encodedBytes = readStagedBackup(prepared)
             writeAndVerifyBackupBytes(uri, encodedBytes)
-            val finalizedUri = DocumentsContract.renameDocument(
-                context.contentResolver,
-                uri,
-                prepared.finalDisplayName,
-            ) ?: error("Backup provider could not finalize the verified file")
-            cleanupUri = finalizedUri
-            verifyWrittenBackupWithRetry(finalizedUri, encodedBytes)
             settingsRepository.recordBackupSuccess(timestamp.toString(), encodedBytes.size.toLong(), automatic = false)
             prepared.stagedFile.delete()
-            cleanupUri = null
-            Result.success(BackupExportReceipt(finalizedUri, encodedBytes.size))
+            Result.success(BackupExportReceipt(uri, encodedBytes.size))
         } catch (cancellation: CancellationException) {
-            cleanupUri?.let(::deleteDocumentQuietly)
+            deleteDocumentQuietly(uri)
             throw cancellation
         } catch (error: Throwable) {
-            cleanupUri?.let(::deleteDocumentQuietly)
+            Log.e(LOG_TAG, "Manual backup failed for provider ${uri.authority.orEmpty()}", error)
+            deleteDocumentQuietly(uri)
             Result.failure(error)
         }
     }
@@ -137,7 +128,6 @@ class BackupRepository(
         folderUri: Uri,
         timestamp: LocalDateTime = LocalDateTime.now(),
     ): Result<BackupExportReceipt> = withContext(ioDispatcher) {
-        var cleanupUri: Uri? = null
         try {
             val encodedBytes = encodedBackupBytes()
             writeLocalSafetyCopy(encodedBytes)
@@ -146,30 +136,19 @@ class BackupRepository(
                 folderUri,
                 DocumentsContract.getTreeDocumentId(folderUri),
             )
-            val pendingDestination = DocumentsContract.createDocument(
-                context.contentResolver,
-                treeDocumentUri,
-                BackupDocumentContracts.MIME_TYPE,
-                autoBackupTemporaryFileName(timestamp),
-            ) ?: error("Could not create backup file")
-            cleanupUri = pendingDestination
-            writeAndVerifyBackupBytes(pendingDestination, encodedBytes)
-            val finalizedDestination = DocumentsContract.renameDocument(
-                context.contentResolver,
-                pendingDestination,
-                fileName,
-            ) ?: error("Backup provider could not finalize the verified file")
-            cleanupUri = finalizedDestination
-            verifyWrittenBackupWithRetry(finalizedDestination, encodedBytes)
+            val finalizedDestination = writeVerifiedAutoBackup(
+                treeDocumentUri = treeDocumentUri,
+                finalDisplayName = fileName,
+                pendingDisplayName = autoBackupTemporaryFileName(timestamp),
+                encodedBytes = encodedBytes,
+            )
             val exportedAt = timestamp.toString()
             settingsRepository.recordBackupSuccess(exportedAt, encodedBytes.size.toLong(), automatic = true)
-            cleanupUri = null
             Result.success(BackupExportReceipt(finalizedDestination, encodedBytes.size))
         } catch (cancellation: CancellationException) {
-            cleanupUri?.let(::deleteDocumentQuietly)
             throw cancellation
         } catch (error: Throwable) {
-            cleanupUri?.let(::deleteDocumentQuietly)
+            Log.e(LOG_TAG, "Automatic backup failed for provider ${folderUri.authority.orEmpty()}", error)
             runCatching {
                 settingsRepository.recordAutoBackupFailure(
                     timestamp = LocalDateTime.now().toString(),
@@ -177,6 +156,77 @@ class BackupRepository(
                 )
             }
             Result.failure(error)
+        }
+    }
+
+    private suspend fun writeVerifiedAutoBackup(
+        treeDocumentUri: Uri,
+        finalDisplayName: String,
+        pendingDisplayName: String,
+        encodedBytes: ByteArray,
+    ): Uri {
+        val pendingDestination = createBackupDocument(treeDocumentUri, pendingDisplayName)
+        try {
+            writeAndVerifyBackupBytes(pendingDestination, encodedBytes)
+            val renamedDestination = renameVerifiedDocumentIfSupported(pendingDestination, finalDisplayName)
+            if (renamedDestination != null) {
+                try {
+                    verifyWrittenBackupWithRetry(renamedDestination, encodedBytes)
+                    return renamedDestination
+                } catch (error: Throwable) {
+                    deleteDocumentQuietly(renamedDestination)
+                    Log.w(LOG_TAG, "Provider rename verification failed; using verified-copy fallback", error)
+                }
+            }
+
+            val finalDestination = writeVerifiedFinalDocument(treeDocumentUri, finalDisplayName, encodedBytes)
+            deleteDocumentQuietly(pendingDestination)
+            return finalDestination
+        } catch (cancellation: CancellationException) {
+            deleteDocumentQuietly(pendingDestination)
+            throw cancellation
+        } catch (error: Throwable) {
+            deleteDocumentQuietly(pendingDestination)
+            throw error
+        }
+    }
+
+    private fun renameVerifiedDocumentIfSupported(documentUri: Uri, finalDisplayName: String): Uri? {
+        if (documentGateway.metadata(documentUri)?.supportsRename != true) return null
+        return runCatching {
+            documentGateway.renameDocument(documentUri, finalDisplayName)
+        }.onFailure { error ->
+            Log.w(LOG_TAG, "Provider rename failed; using verified-copy fallback", error)
+        }.getOrNull()
+    }
+
+    private suspend fun writeVerifiedFinalDocument(
+        treeDocumentUri: Uri,
+        finalDisplayName: String,
+        encodedBytes: ByteArray,
+    ): Uri {
+        val finalDestination = createBackupDocument(treeDocumentUri, finalDisplayName)
+        try {
+            writeAndVerifyBackupBytes(finalDestination, encodedBytes)
+            return finalDestination
+        } catch (cancellation: CancellationException) {
+            deleteDocumentQuietly(finalDestination)
+            throw cancellation
+        } catch (error: Throwable) {
+            deleteDocumentQuietly(finalDestination)
+            throw error
+        }
+    }
+
+    private fun createBackupDocument(parentUri: Uri, displayName: String): Uri {
+        return try {
+            documentGateway.createDocument(parentUri, BackupDocumentContracts.MIME_TYPE, displayName)
+                ?: error("Backup destination could not create the file")
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            if (error.message.orEmpty().contains("could not create", ignoreCase = true)) throw error
+            throw IllegalStateException("Backup destination could not create the file", error)
         }
     }
 
@@ -238,14 +288,21 @@ class BackupRepository(
     }
 
     private fun writeBackupBytes(uri: Uri, encodedBytes: ByteArray) {
-        val output = context.contentResolver.openOutputStream(uri, BACKUP_WRITE_MODE)
-            ?: error("Could not open backup destination")
-        output.use {
-            output.write(encodedBytes)
-            output.flush()
-            (output as? FileOutputStream)?.let { fileOutput ->
-                runCatching { fileOutput.fd.sync() }
+        try {
+            val output = context.contentResolver.openOutputStream(uri, BACKUP_WRITE_MODE)
+                ?: error("Could not open backup destination")
+            output.use {
+                output.write(encodedBytes)
+                output.flush()
+                (output as? FileOutputStream)?.let { fileOutput ->
+                    runCatching { fileOutput.fd.sync() }
+                }
             }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            if (error.message.orEmpty().contains("Could not open", ignoreCase = true)) throw error
+            throw IllegalStateException("Backup destination rejected the write", error)
         }
     }
 
@@ -265,10 +322,16 @@ class BackupRepository(
     }
 
     private fun verifyWrittenBackup(uri: Uri, expectedBytes: ByteArray) {
-        val writtenBytes = readBackupBytes(uri)
+        val writtenBytes = try {
+            readBackupBytes(uri)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            throw IllegalStateException("Backup destination could not be read back", error)
+        }
         check(writtenBytes.isNotEmpty()) { "Backup file was empty after writing" }
         check(writtenBytes.contentEquals(expectedBytes)) { "Backup file did not match written data" }
-        readDocumentMetadata(uri)?.let { metadata ->
+        documentGateway.metadata(uri)?.let { metadata ->
             metadata.size?.takeIf { it >= 0L }?.let { size ->
                 check(size == expectedBytes.size.toLong()) { "Backup provider reported an incorrect file size" }
             }
@@ -282,30 +345,6 @@ class BackupRepository(
             throw IllegalStateException("Backup verification failed", parseError)
         }
         BackupValidator.validate(backup)?.let { error("Backup verification failed: $it") }
-    }
-
-    private fun readDocumentMetadata(uri: Uri): DocumentMetadata? {
-        return runCatching {
-            context.contentResolver.query(
-                uri,
-                arrayOf(OpenableColumns.SIZE, DocumentsContract.Document.COLUMN_FLAGS),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
-                if (!cursor.moveToFirst()) return@use null
-                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                val flagsIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_FLAGS)
-                val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else null
-                val flags = if (flagsIndex >= 0 && !cursor.isNull(flagsIndex)) cursor.getInt(flagsIndex) else null
-                DocumentMetadata(
-                    size = size,
-                    isPartial = flags?.let {
-                        it and DocumentsContract.Document.FLAG_PARTIAL != 0
-                    },
-                )
-            }
-        }.getOrNull()
     }
 
     suspend fun restoreFromJson(encoded: String): Result<Unit> {
@@ -467,14 +506,9 @@ class BackupRepository(
 
     private fun deleteDocumentQuietly(uri: Uri) {
         runCatching {
-            DocumentsContract.deleteDocument(context.contentResolver, uri)
+            documentGateway.deleteDocument(uri)
         }
     }
-
-    private data class DocumentMetadata(
-        val size: Long?,
-        val isPartial: Boolean?,
-    )
 
     private suspend fun currentConvertedBackup(): ConvertedBackup {
         return ConvertedBackup(
@@ -544,6 +578,7 @@ class BackupRepository(
     )
 
     private companion object {
+        const val LOG_TAG = "HabitBackup"
         const val MAX_BACKUP_BYTES = 10 * 1024 * 1024
         const val BACKUP_WRITE_MODE = "w"
         const val BACKUP_SAFETY_DIRECTORY_NAME = "backup-safety"
@@ -568,7 +603,9 @@ class BackupRepository(
                 message.contains("file size", ignoreCase = true) -> "Destination reported the wrong size"
                 message.contains("did not match", ignoreCase = true) -> "Destination changed the backup data"
                 message.contains("incomplete", ignoreCase = true) -> "Destination did not finish uploading"
-                message.contains("finalize", ignoreCase = true) -> "Destination could not finalize the backup"
+                message.contains("could not create", ignoreCase = true) -> "Destination could not create the backup file"
+                message.contains("rejected the write", ignoreCase = true) -> "Destination rejected the backup write"
+                message.contains("read back", ignoreCase = true) -> "Destination could not verify the uploaded file"
                 message.contains("Could not open", ignoreCase = true) -> "Destination could not be opened"
                 else -> "Backup provider write failed"
             }

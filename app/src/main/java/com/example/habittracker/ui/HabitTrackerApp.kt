@@ -20,7 +20,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.habittracker.backup.BackupRepository
-import com.example.habittracker.backup.manualBackupPendingFileName
+import com.example.habittracker.backup.manualBackupFileName
 import com.example.habittracker.data.CycleRestartBehavior
 import com.example.habittracker.data.CycleRestartTiming
 import com.example.habittracker.data.ExerciseCheckStatus
@@ -5250,7 +5250,7 @@ internal fun restoreFailureStatus(error: Throwable): String {
 }
 
 internal fun launchBackupDocument(
-    fileName: String = manualBackupPendingFileName(),
+    fileName: String = manualBackupFileName(),
     launch: (String) -> Unit,
     onNoDocumentPicker: () -> Unit,
 ) {

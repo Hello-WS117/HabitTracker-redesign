@@ -1,6 +1,6 @@
 # Current Feature Inventory
 
-This document describes the user-visible behavior of HabitTracker version 1.0.49. It is a preservation contract for a UI redesign, not a proposal for new behavior.
+This document describes the user-visible behavior of HabitTracker version 1.0.50. It is a preservation contract for a UI redesign, not a proposal for new behavior.
 
 ## Product Model
 
@@ -340,8 +340,9 @@ The Settings destination includes:
 
 - Backup format is versioned JSON with schema version 1.
 - Manual backup stages and validates the complete payload in app-private storage before opening Android's document picker.
-- Manual and automatic exports use a `.pending` destination and expose the final `.json` file only after verification succeeds.
+- Manual backup writes the selected final `.json` document directly and does not require the provider to support rename.
 - Automatic backup uses a user-selected document-tree folder and WorkManager with retry backoff after provider failures.
+- Automatic backup verifies a `.pending` document first, uses atomic rename when supported, and otherwise writes and verifies a final copy before deleting the pending document.
 - A backup includes tasks, rules, occurrences, logs, sequences, exercises, exercise checks, routine plans/phases, auto-restart data, and settings.
 - Every backup write is read back, checked for non-zero size, exact byte and provider-size equality, parseability, and schema validity.
 - A verified app-private safety copy is retained before each external export.

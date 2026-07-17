@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class SettingsDocumentLaunchTest {
     @Test
-    fun launchBackupDocumentUsesPendingFilenameUntilVerificationFinishes() {
+    fun launchBackupDocumentUsesFinalJsonFilenameForProviderCompatibility() {
         var launchedFilename: String? = null
         var unavailable = false
 
@@ -27,7 +27,7 @@ class SettingsDocumentLaunchTest {
         assertTrue(
             launchedFilename
                 .orEmpty()
-                .matches(Regex("personal_scheduler_backup_v1_\\d{8}-\\d{6}\\.json\\.pending")),
+                .matches(Regex("personal_scheduler_backup_v1_\\d{8}-\\d{6}\\.json")),
         )
         assertFalse(unavailable)
     }

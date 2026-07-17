@@ -9,7 +9,7 @@ object BackupDocumentContracts {
         return Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = MIME_TYPE
-            putExtra(Intent.EXTRA_TITLE, manualBackupPendingFileName())
+            putExtra(Intent.EXTRA_TITLE, manualBackupFileName())
         }
     }
 

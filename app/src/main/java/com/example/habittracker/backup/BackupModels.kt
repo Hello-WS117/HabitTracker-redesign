@@ -42,10 +42,6 @@ fun manualBackupFileName(timestamp: LocalDateTime = LocalDateTime.now()): String
     return "personal_scheduler_backup_v1_${timestamp.format(BACKUP_FILENAME_FORMATTER)}.json"
 }
 
-fun manualBackupPendingFileName(timestamp: LocalDateTime = LocalDateTime.now()): String {
-    return "${manualBackupFileName(timestamp)}.pending"
-}
-
 @Serializable
 data class HabitBackupV1(
     val schemaVersion: Int = BACKUP_SCHEMA_VERSION,

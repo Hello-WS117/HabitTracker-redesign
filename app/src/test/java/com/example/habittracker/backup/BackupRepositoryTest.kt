@@ -581,7 +581,6 @@ class BackupRepositoryTest {
         val prepared = repository.prepareManualBackup(now).getOrThrow()
 
         assertEquals("personal_scheduler_backup_v1_20260520-120000.json", prepared.finalDisplayName)
-        assertEquals("personal_scheduler_backup_v1_20260520-120000.json.pending", prepared.pendingDisplayName)
         assertTrue(prepared.byteCount > 0)
         assertTrue(prepared.stagedFile.isFile)
         assertEquals(prepared.byteCount.toLong(), prepared.stagedFile.length())
@@ -590,6 +589,163 @@ class BackupRepositoryTest {
 
         repository.discardPreparedManualBackup(prepared)
         assertFalse(prepared.stagedFile.exists())
+    }
+
+    @Test
+    fun preparedManualBackupWritesFinalDocumentWithoutRequiringProviderRename() = runTest {
+        seedExistingDatabase()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://com.example.habittracker.backup/manual-final.json")
+        val output = ByteArrayOutputStream()
+        shadowOf(context.contentResolver).registerOutputStream(uri, output)
+        registerInputStreamFromOutput(context, uri, output)
+        val gateway = RecordingBackupDocumentGateway(
+            supportsRename = true,
+            renameFailure = UnsupportedOperationException("Provider does not implement rename"),
+        )
+        val providerCompatibleRepository = repositoryWithGateway(context, gateway)
+        val prepared = providerCompatibleRepository.prepareManualBackup(now).getOrThrow()
+
+        val result = providerCompatibleRepository.exportPreparedManualBackup(uri, prepared, now)
+
+        assertTrue(result.isSuccess)
+        assertEquals(uri, result.getOrThrow().uri)
+        assertTrue(output.size() > 0)
+        assertEquals(0, gateway.renameCalls)
+        assertTrue(gateway.deletedUris.isEmpty())
+        assertEquals(output.size().toLong(), settingsRepository.settings.first().backupLastVerifiedBytes)
+    }
+
+    @Test
+    fun autoBackupCopiesVerifiedPendingDataWhenProviderDoesNotSupportRename() = runTest {
+        seedExistingDatabase()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val pendingUri = Uri.parse("content://com.example.habittracker.backup/auto.pending")
+        val finalUri = Uri.parse("content://com.example.habittracker.backup/auto.json")
+        val pendingOutput = ByteArrayOutputStream()
+        val finalOutput = ByteArrayOutputStream()
+        registerWritableDocument(context, pendingUri, pendingOutput)
+        registerWritableDocument(context, finalUri, finalOutput)
+        val gateway = RecordingBackupDocumentGateway(
+            createResults = mutableListOf(pendingUri, finalUri),
+            supportsRename = false,
+        )
+        val providerCompatibleRepository = repositoryWithGateway(context, gateway)
+        val folderUri = Uri.parse("content://com.example.habittracker.backup/tree/backups")
+
+        val result = providerCompatibleRepository.exportToAutoBackupFolder(folderUri, now)
+
+        assertTrue(result.isSuccess)
+        assertEquals(finalUri, result.getOrThrow().uri)
+        assertTrue(pendingOutput.size() > 0)
+        assertTrue(pendingOutput.toByteArray().contentEquals(finalOutput.toByteArray()))
+        assertEquals(
+            listOf(
+                "personal_scheduler_backup_v1_20260520-120000.json.pending",
+                "personal_scheduler_backup_v1_20260520-120000.json",
+            ),
+            gateway.createdDisplayNames,
+        )
+        assertEquals(0, gateway.renameCalls)
+        assertTrue(pendingUri in gateway.deletedUris)
+        assertFalse(finalUri in gateway.deletedUris)
+        val settings = settingsRepository.settings.first()
+        assertTrue(settings.autoBackupLastRunAt.isNotBlank())
+        assertEquals(finalOutput.size().toLong(), settings.backupLastVerifiedBytes)
+    }
+
+    @Test
+    fun autoBackupFallsBackToVerifiedCopyWhenAdvertisedRenameThrows() = runTest {
+        seedExistingDatabase()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val pendingUri = Uri.parse("content://com.example.habittracker.backup/throwing-rename.pending")
+        val finalUri = Uri.parse("content://com.example.habittracker.backup/throwing-rename.json")
+        val pendingOutput = ByteArrayOutputStream()
+        val finalOutput = ByteArrayOutputStream()
+        registerWritableDocument(context, pendingUri, pendingOutput)
+        registerWritableDocument(context, finalUri, finalOutput)
+        val gateway = RecordingBackupDocumentGateway(
+            createResults = mutableListOf(pendingUri, finalUri),
+            supportsRename = true,
+            renameFailure = UnsupportedOperationException("Cloud provider rename failed"),
+        )
+        val providerCompatibleRepository = repositoryWithGateway(context, gateway)
+        val folderUri = Uri.parse("content://com.example.habittracker.backup/tree/backups")
+
+        val result = providerCompatibleRepository.exportToAutoBackupFolder(folderUri, now)
+
+        assertTrue(result.isSuccess)
+        assertEquals(finalUri, result.getOrThrow().uri)
+        assertEquals(1, gateway.renameCalls)
+        assertTrue(pendingOutput.toByteArray().contentEquals(finalOutput.toByteArray()))
+        assertTrue(pendingUri in gateway.deletedUris)
+        assertFalse(finalUri in gateway.deletedUris)
+    }
+
+    @Test
+    fun autoBackupUsesAtomicRenameWhenProviderSupportsIt() = runTest {
+        seedExistingDatabase()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val pendingUri = Uri.parse("content://com.example.habittracker.backup/atomic.pending")
+        val renamedUri = Uri.parse("content://com.example.habittracker.backup/atomic.json")
+        val pendingOutput = ByteArrayOutputStream()
+        registerWritableDocument(context, pendingUri, pendingOutput)
+        registerInputStreamFromOutput(context, renamedUri, pendingOutput)
+        val gateway = RecordingBackupDocumentGateway(
+            createResults = mutableListOf(pendingUri),
+            supportsRename = true,
+            renameResult = renamedUri,
+        )
+        val providerCompatibleRepository = repositoryWithGateway(context, gateway)
+        val folderUri = Uri.parse("content://com.example.habittracker.backup/tree/backups")
+
+        val result = providerCompatibleRepository.exportToAutoBackupFolder(folderUri, now)
+
+        assertTrue(result.isSuccess)
+        assertEquals(renamedUri, result.getOrThrow().uri)
+        assertEquals(1, gateway.renameCalls)
+        assertEquals(
+            listOf("personal_scheduler_backup_v1_20260520-120000.json.pending"),
+            gateway.createdDisplayNames,
+        )
+        assertTrue(gateway.deletedUris.isEmpty())
+    }
+
+    @Test
+    fun autoBackupDeletesPendingAndFinalDocumentsWhenFallbackCannotBeVerified() = runTest {
+        val previousExportedAt = "2026-05-19T12:00:00"
+        settingsRepository.restore(
+            AppSettingsSnapshot(
+                backupLastExportedAt = previousExportedAt,
+                backupLastVerifiedBytes = 123_456L,
+            ),
+        )
+        seedExistingDatabase()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val pendingUri = Uri.parse("content://com.example.habittracker.backup/failing.pending")
+        val finalUri = Uri.parse("content://com.example.habittracker.backup/failing.json")
+        val pendingOutput = ByteArrayOutputStream()
+        val finalOutput = ByteArrayOutputStream()
+        registerWritableDocument(context, pendingUri, pendingOutput)
+        shadowOf(context.contentResolver).registerOutputStream(finalUri, finalOutput)
+        shadowOf(context.contentResolver).registerInputStream(finalUri, ByteArrayInputStream(ByteArray(0)))
+        val gateway = RecordingBackupDocumentGateway(
+            createResults = mutableListOf(pendingUri, finalUri),
+            supportsRename = false,
+        )
+        val providerCompatibleRepository = repositoryWithGateway(context, gateway)
+        val folderUri = Uri.parse("content://com.example.habittracker.backup/tree/backups")
+
+        val result = providerCompatibleRepository.exportToAutoBackupFolder(folderUri, now)
+
+        assertTrue(result.isFailure)
+        assertEquals("Backup file was empty after writing", result.exceptionOrNull()?.message)
+        assertTrue(pendingUri in gateway.deletedUris)
+        assertTrue(finalUri in gateway.deletedUris)
+        val settings = settingsRepository.settings.first()
+        assertEquals(previousExportedAt, settings.backupLastExportedAt)
+        assertEquals(123_456L, settings.backupLastVerifiedBytes)
+        assertEquals("Destination remained empty", settings.autoBackupLastFailureReason)
     }
 
     @Test
@@ -726,6 +882,65 @@ class BackupRepositoryTest {
                 }
             },
         )
+    }
+
+    private fun registerWritableDocument(
+        context: Context,
+        uri: Uri,
+        output: ByteArrayOutputStream,
+    ) {
+        shadowOf(context.contentResolver).registerOutputStream(uri, output)
+        registerInputStreamFromOutput(context, uri, output)
+    }
+
+    private fun repositoryWithGateway(
+        context: Context,
+        gateway: BackupDocumentGateway,
+    ): BackupRepository {
+        return BackupRepository(
+            context = context,
+            database = database,
+            settingsRepository = settingsRepository,
+            json = json,
+            verificationRetryDelaysMillis = emptyList(),
+            documentGateway = gateway,
+        )
+    }
+
+    private class RecordingBackupDocumentGateway(
+        private val createResults: MutableList<Uri> = mutableListOf(),
+        private val supportsRename: Boolean,
+        private val renameResult: Uri? = null,
+        private val renameFailure: Throwable? = null,
+    ) : BackupDocumentGateway {
+        val createdDisplayNames = mutableListOf<String>()
+        val deletedUris = mutableListOf<Uri>()
+        var renameCalls: Int = 0
+            private set
+
+        override fun createDocument(parentUri: Uri, mimeType: String, displayName: String): Uri? {
+            createdDisplayNames += displayName
+            return createResults.removeFirstOrNull()
+        }
+
+        override fun renameDocument(documentUri: Uri, displayName: String): Uri? {
+            renameCalls += 1
+            renameFailure?.let { throw it }
+            return renameResult
+        }
+
+        override fun deleteDocument(documentUri: Uri): Boolean {
+            deletedUris += documentUri
+            return true
+        }
+
+        override fun metadata(documentUri: Uri): BackupDocumentMetadata {
+            return BackupDocumentMetadata(
+                size = null,
+                isPartial = false,
+                supportsRename = supportsRename,
+            )
+        }
     }
 
     private fun validBackup(
