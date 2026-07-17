@@ -21,7 +21,19 @@ internal fun backupFailureUserLabel(error: Throwable): String {
     if (failures.any { it is SecurityException }) return "folder permission expired"
 
     val message = failures.joinToString(" ") { it.message.orEmpty() }
+    val validationDetail = failures
+        .asSequence()
+        .map { it.message.orEmpty() }
+        .mapNotNull { failureMessage ->
+            failureMessage.substringAfter("Local data cannot be exported:", missingDelimiterValue = "")
+                .trim()
+                .takeIf { it.isNotEmpty() }
+        }
+        .firstOrNull()
+        ?.removePrefix("Backup contains ")
+        ?.replaceFirstChar(Char::lowercase)
     val specificFailure = when {
+        validationDetail != null -> "local data validation failed: $validationDetail"
         message.contains("Local data cannot be exported", ignoreCase = true) -> "local data validation failed"
         message.contains("too large", ignoreCase = true) -> "backup exceeds the 10 MB limit"
         message.contains("empty", ignoreCase = true) -> "destination stayed empty"

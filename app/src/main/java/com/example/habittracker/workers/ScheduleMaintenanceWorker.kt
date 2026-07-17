@@ -47,6 +47,7 @@ data class ScheduleMaintenanceResult(
     val missedMarked: Int,
     val cadenceRepairs: Int = 0,
     val cycleRestarts: Int = 0,
+    val derivedDataRepairs: Int = 0,
 )
 
 object ScheduleMaintenanceHandler {
@@ -55,11 +56,12 @@ object ScheduleMaintenanceHandler {
         val settings = AppSettingsRepository(appContext).settings.first()
         val operationalDate = OperationalDayCalculator(settings.dayRolloverTime).today()
         val repository = HabitRepository(HabitDatabase.get(appContext))
+        val derivedDataRepairs = repository.repairDerivedDataConsistency()
         val missedMarked = repository.markOverduePendingMissed(operationalDate)
         repository.extendGeneratedOccurrences(operationalDate)
         val cadenceRepairs = repository.repairPendingCadences(operationalDate)
         val cycleRestarts = repository.restartEndedCycles(operationalDate)
-        return ScheduleMaintenanceResult(missedMarked, cadenceRepairs, cycleRestarts)
+        return ScheduleMaintenanceResult(missedMarked, cadenceRepairs, cycleRestarts, derivedDataRepairs)
     }
 }
 

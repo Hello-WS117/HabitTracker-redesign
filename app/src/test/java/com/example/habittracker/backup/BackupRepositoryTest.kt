@@ -467,6 +467,41 @@ class BackupRepositoryTest {
     }
 
     @Test
+    fun createBackupPreservesRestorableScheduleMetadataDrift() = runTest {
+        dao.restoreTasks(
+            listOf(taskEntity(id = 20, name = "Foundation", taskType = TaskType.SIMPLE_HABIT)),
+        )
+        dao.restoreRules(
+            listOf(
+                ruleEntity(id = 20, taskId = 20, ruleType = RuleType.DAILY).copy(
+                    endDate = LocalDate.of(2026, 5, 21),
+                    lastGeneratedDate = LocalDate.of(2026, 5, 19),
+                ),
+            ),
+        )
+        dao.restoreOccurrences(
+            listOf(
+                ScheduledOccurrenceEntity(
+                    id = 20,
+                    taskId = 20,
+                    recurrenceRuleId = 20,
+                    scheduledDate = LocalDate.of(2026, 5, 22),
+                    operationalDate = LocalDate.of(2026, 5, 22),
+                    status = OccurrenceStatus.PENDING,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            ),
+        )
+
+        val backup = repository.createBackup()
+
+        assertEquals(listOf(20L), backup.scheduledOccurrences.map { it.id })
+        assertEquals("2026-05-19", backup.recurrenceRules.single().lastGeneratedDate)
+        assertEquals(null, BackupValidator.validate(backup))
+    }
+
+    @Test
     fun exportToUriWritesBackupAndUpdatesExportTimestamp() = runTest {
         settingsRepository.restore(
             AppSettingsSnapshot(

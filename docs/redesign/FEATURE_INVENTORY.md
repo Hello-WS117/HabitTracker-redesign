@@ -1,6 +1,6 @@
 # Current Feature Inventory
 
-This document describes the user-visible behavior of HabitTracker version 1.0.51. It is a preservation contract for a UI redesign, not a proposal for new behavior.
+This document describes the user-visible behavior of HabitTracker version 1.0.52. It is a preservation contract for a UI redesign, not a proposal for new behavior.
 
 ## Product Model
 

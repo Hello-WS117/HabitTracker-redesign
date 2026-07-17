@@ -397,10 +397,10 @@ class HabitRepository(
             generator.nextValidDate(requestedNextStartDate, it.blockedDays) ?: return false
         }
         val normalizedCurrentEnd = maxOf(currentRule.startDate, currentPhaseEndDate)
-        dao.deleteFuturePendingOccurrences(
+        dao.deletePendingOccurrencesAfterDate(
             currentTask.id,
             currentRule.id,
-            normalizedCurrentEnd.plusDays(1),
+            normalizedCurrentEnd,
         )
         dao.updateRule(
             currentRule.copy(
@@ -434,7 +434,7 @@ class HabitRepository(
         val taskToActivate = nextTask ?: return false
         val ruleToActivate = nextRule ?: return false
         val activationDate = nextStartDate ?: return false
-        dao.deleteFuturePendingOccurrences(taskToActivate.id, ruleToActivate.id, minOf(ruleToActivate.startDate, activationDate))
+        dao.deleteAllPendingOccurrencesForRule(taskToActivate.id, ruleToActivate.id)
         val nextEndDate = if (nextPhase.advanceMode == PhaseAdvanceMode.AUTOMATIC) {
             activationDate.plusDays((nextPhase.minimumDays - 1).toLong())
         } else {
@@ -979,6 +979,7 @@ class HabitRepository(
     }
 
     suspend fun deleteTaskPermanently(taskId: Long) = database.withTransaction {
+        dao.clearRulesStartingAfterTask(taskId, LocalDateTime.now())
         dao.deleteLogsForTask(taskId)
         dao.deleteOccurrencesForTask(taskId)
         dao.deleteRulesForTask(taskId)
@@ -989,7 +990,9 @@ class HabitRepository(
 
     suspend fun deleteRoutinePlanPermanently(planId: Long) = database.withTransaction {
         val taskIds = dao.routinePhasesForPlan(planId).map { it.taskId }
+        val now = LocalDateTime.now()
         taskIds.forEach { taskId ->
+            dao.clearRulesStartingAfterTask(taskId, now)
             dao.deleteLogsForTask(taskId)
             dao.deleteOccurrencesForTask(taskId)
             dao.deleteRulesForTask(taskId)
@@ -997,6 +1000,48 @@ class HabitRepository(
             dao.deleteTask(taskId)
         }
         dao.deleteOrphanedRoutinePlans()
+    }
+
+    suspend fun repairDerivedDataConsistency(): Int = database.withTransaction {
+        val now = LocalDateTime.now()
+        var repaired = dao.clearInvalidStartsAfterReferences(now)
+
+        val completedPhaseTaskIds = dao.allRoutinePhases()
+            .asSequence()
+            .filter { it.status == RoutinePhaseStatus.COMPLETED }
+            .map { it.taskId }
+            .toSet()
+        val ruleById = dao.allRules().associateBy { it.id }
+        val protectedOccurrenceIds = buildSet {
+            dao.allLogs().mapNotNullTo(this) { it.occurrenceId }
+            dao.allOccurrenceExerciseChecks().mapTo(this) { it.occurrenceId }
+        }
+        val stalePendingIds = dao.allOccurrences()
+            .asSequence()
+            .filter { it.taskId in completedPhaseTaskIds }
+            .filter { it.status == OccurrenceStatus.PENDING }
+            .filter { it.id !in protectedOccurrenceIds }
+            .filter { occurrence ->
+                val rule = ruleById[occurrence.recurrenceRuleId] ?: return@filter false
+                val afterEnd = rule.endDate?.let { endDate ->
+                    occurrence.scheduledDate.isAfter(endDate) || occurrence.operationalDate.isAfter(endDate)
+                } == true
+                occurrence.scheduledDate.isBefore(rule.startDate) ||
+                    occurrence.operationalDate.isBefore(rule.startDate) ||
+                    afterEnd
+            }
+            .map { it.id }
+            .toSet()
+        repaired += deletePendingRepairRows(stalePendingIds)
+
+        val nonSequenceTaskIds = dao.tasks(includeArchived = true)
+            .filter { it.taskType != TaskType.SEQUENCE_ROUTINE }
+            .map { it.id }
+        nonSequenceTaskIds.forEach { taskId ->
+            repaired += deleteUnreferencedSequencesForTask(taskId)
+        }
+        repaired += dao.deleteOrphanedRoutinePlans()
+        repaired
     }
 
     suspend fun markOverduePendingMissed(currentOperationalDate: LocalDate): Int {
@@ -1987,22 +2032,30 @@ class HabitRepository(
             .getOrDefault(LongTermRecurrenceAnchor.COMPLETION_DATE)
     }
 
-    private suspend fun deleteUnreferencedSequencesForTask(taskId: Long) {
-        val sequenceIds = dao.allSequences()
-            .filter { it.taskId == taskId }
-            .map { it.id }
-            .toSet()
-        if (sequenceIds.isEmpty()) return
-        val sequenceItemIds = dao.allSequenceItems()
-            .filter { it.sequenceId in sequenceIds }
-            .map { it.id }
-            .toSet()
+    private suspend fun deleteUnreferencedSequencesForTask(taskId: Long): Int {
+        val sequences = dao.allSequences().filter { it.taskId == taskId }
+        if (sequences.isEmpty()) return 0
+        val sequenceItemsBySequenceId = dao.allSequenceItems()
+            .filter { item -> sequences.any { it.id == item.sequenceId } }
+            .groupBy { it.sequenceId }
         val referencedItemIds = dao.occurrencesForTask(taskId)
             .mapNotNull { it.sequenceItemId }
             .toSet()
-        if (sequenceItemIds.intersect(referencedItemIds).isEmpty()) {
-            dao.deleteSequenceForTask(taskId)
+        val checkedExerciseIds = dao.allOccurrenceExerciseChecks()
+            .map { it.sequenceExerciseId }
+            .toSet()
+        val checkedItemIds = dao.allSequenceExercises()
+            .filter { it.id in checkedExerciseIds }
+            .map { it.sequenceItemId }
+            .toSet()
+        var deleted = 0
+        sequences.forEach { sequence ->
+            val itemIds = sequenceItemsBySequenceId[sequence.id].orEmpty().map { it.id }
+            if (itemIds.none { it in referencedItemIds || it in checkedItemIds }) {
+                deleted += dao.deleteSequenceById(sequence.id)
+            }
         }
+        return deleted
     }
 
     private fun validateTaskRuleAndSequence(

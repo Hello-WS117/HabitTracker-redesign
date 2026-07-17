@@ -27,7 +27,7 @@ This directory is the product and engineering handoff for redesigning HabitTrack
 
 ## Product Snapshot
 
-- App version: `1.0.51` (`versionCode 52`)
+- App version: `1.0.52` (`versionCode 53`)
 - Android package: `com.example.habittracker`
 - Minimum Android version: API 26
 - Target Android version: API 35

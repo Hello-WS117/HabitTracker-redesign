@@ -2078,6 +2078,7 @@ class HabitTrackerUiStore(
         val activeDao = dao ?: return
         withContext(Dispatchers.IO) {
             repository?.advanceDueRoutinePhases(operationalDate)
+            repository?.repairDerivedDataConsistency()
             repository?.markOverduePendingMissed(operationalDate)
             repository?.extendGeneratedOccurrences(operationalDate)
             repository?.repairPendingCadences(operationalDate)

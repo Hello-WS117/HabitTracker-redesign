@@ -270,7 +270,80 @@ class HabitRepositoryTest {
         assertEquals(LocalDate.of(2026, 6, 4), dao.ruleForTask(secondTaskId)!!.startDate)
         assertEquals(LocalDate.of(2026, 6, 17), dao.ruleForTask(secondTaskId)!!.endDate)
         assertTrue(dao.occurrencesForTask(firstTaskId).any { it.id == completed.id && it.status == OccurrenceStatus.COMPLETED })
+        assertTrue(
+            dao.occurrencesForTask(firstTaskId).none {
+                it.status == OccurrenceStatus.PENDING &&
+                    (it.scheduledDate.isAfter(LocalDate.of(2026, 6, 3)) ||
+                        it.operationalDate.isAfter(LocalDate.of(2026, 6, 3)))
+            },
+        )
         assertEquals(LocalDate.of(2026, 6, 4), dao.occurrencesForTask(secondTaskId).minOf { it.operationalDate })
+    }
+
+    @Test
+    fun derivedDataRepairRemovesOnlyUnactedPendingRowsOutsideACompletedPhase() = runTest {
+        val taskId = repository.createTaskWithRule(
+            task = task(name = "Foundation"),
+            rule = rule(ruleType = RuleType.DAILY, startDate = LocalDate.of(2026, 6, 1)),
+            generateThrough = LocalDate.of(2026, 6, 6),
+        )
+        val task = dao.taskById(taskId)!!
+        val rule = dao.ruleForTask(taskId)!!
+        dao.updateTask(task.copy(isActive = false))
+        dao.updateRule(
+            rule.copy(
+                endDate = LocalDate.of(2026, 6, 3),
+                durationDays = 3,
+                lastGeneratedDate = LocalDate.of(2026, 6, 3),
+            ),
+        )
+        val planId = dao.insertRoutinePlan(
+            RoutinePlanEntity(name = "Achilles", createdAt = now, updatedAt = now),
+        )
+        dao.insertRoutinePhases(
+            listOf(
+                RoutinePhaseEntity(
+                    routinePlanId = planId,
+                    taskId = taskId,
+                    position = 0,
+                    advanceMode = PhaseAdvanceMode.MANUAL,
+                    minimumDays = 3,
+                    status = RoutinePhaseStatus.COMPLETED,
+                    activatedDate = LocalDate.of(2026, 6, 1),
+                    advancedAt = now,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            ),
+        )
+        val protected = dao.occurrencesForTask(taskId).single {
+            it.operationalDate == LocalDate.of(2026, 6, 5)
+        }
+        dao.insertLog(
+            CompletionLogEntity(
+                occurrenceId = protected.id,
+                taskId = taskId,
+                action = LogAction.EDITED,
+                timestamp = now,
+                operationalDate = protected.operationalDate,
+                note = "Preserved history",
+                createdAt = now,
+            ),
+        )
+
+        val repaired = repository.repairDerivedDataConsistency()
+
+        assertEquals(2, repaired)
+        assertEquals(
+            listOf(
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 2),
+                LocalDate.of(2026, 6, 3),
+                LocalDate.of(2026, 6, 5),
+            ),
+            dao.occurrencesForTask(taskId).map { it.operationalDate }.sorted(),
+        )
+        assertEquals("Preserved history", dao.logsForTask(taskId).single().note)
     }
 
     @Test
@@ -1897,9 +1970,19 @@ class HabitRepositoryTest {
     fun deleteTaskPermanentlyRemovesTaskScheduleSequencesAndLogs() = runTest {
         val taskId = repository.createTaskWithRule(
             task = task(name = "Workout", taskType = TaskType.SEQUENCE_ROUTINE, pushable = true),
-            rule = rule(ruleType = RuleType.SEQUENCE, startDate = LocalDate.of(2026, 5, 20)),
+            rule = rule(ruleType = RuleType.SEQUENCE, startDate = LocalDate.of(2026, 5, 20)).copy(
+                endDate = LocalDate.of(2026, 5, 21),
+                durationDays = 2,
+            ),
             sequenceItems = listOf(sequenceItem("Push", 0), sequenceItem("Pull", 1)),
             generateThrough = LocalDate.of(2026, 5, 21),
+        )
+        val dependentTaskId = repository.createTaskWithRule(
+            task = task(name = "Next block"),
+            rule = rule(ruleType = RuleType.DAILY, startDate = LocalDate.of(2026, 5, 22)).copy(
+                startsAfterTaskId = taskId,
+            ),
+            generateThrough = LocalDate.of(2026, 5, 22),
         )
         val occurrence = dao.occurrencesForTask(taskId).first()
         repository.completeOccurrence(occurrence.id, LocalDate.of(2026, 5, 20), "Done")
@@ -1911,6 +1994,7 @@ class HabitRepositoryTest {
         assertTrue(dao.logsForTask(taskId).isEmpty())
         assertTrue(dao.ruleForTask(taskId) == null)
         assertTrue(dao.sequenceForTask(taskId) == null)
+        assertEquals(null, dao.ruleForTask(dependentTaskId)!!.startsAfterTaskId)
     }
 
     @Test

@@ -259,42 +259,6 @@ object BackupValidator {
         if (backup.completionLogs.any { it.action in statusChangingLogActions && it.occurrenceId == null }) {
             return "Backup contains a status log without an occurrence"
         }
-        val ruleDateRangeById = backup.recurrenceRules.associate { rule ->
-            rule.id to RuleDateRange(
-                startDate = LocalDate.parse(rule.startDate),
-                endDate = rule.endDate?.let(LocalDate::parse),
-                lastGeneratedDate = rule.lastGeneratedDate?.let(LocalDate::parse),
-            )
-        }
-        if (ruleDateRangeById.values.any { it.lastGeneratedDate != null && it.lastGeneratedDate.isBefore(it.startDate) }) {
-            return "Backup contains invalid recurrence generation metadata"
-        }
-        if (
-            backup.scheduledOccurrences.any { occurrence ->
-                if (occurrence.status != OccurrenceStatus.PENDING.name) return@any false
-                val dateRange = ruleDateRangeById[occurrence.recurrenceRuleId] ?: return@any false
-                val scheduledDate = LocalDate.parse(occurrence.scheduledDate)
-                val operationalDate = LocalDate.parse(occurrence.operationalDate)
-                scheduledDate.isBefore(dateRange.startDate) ||
-                    operationalDate.isBefore(dateRange.startDate) ||
-                    (dateRange.endDate != null && scheduledDate.isAfter(dateRange.endDate)) ||
-                    (dateRange.endDate != null && operationalDate.isAfter(dateRange.endDate))
-            }
-        ) {
-            return "Backup contains occurrences outside recurrence rule date range"
-        }
-        val lastGeneratedDateByRuleId = backup.recurrenceRules.mapNotNull { rule ->
-            rule.lastGeneratedDate?.let { rule.id to LocalDate.parse(it) }
-        }.toMap()
-        if (
-            backup.scheduledOccurrences.any { occurrence ->
-                val lastGeneratedDate = lastGeneratedDateByRuleId[occurrence.recurrenceRuleId]
-                val occurrenceDate = maxOf(LocalDate.parse(occurrence.scheduledDate), LocalDate.parse(occurrence.operationalDate))
-                lastGeneratedDate != null && occurrenceDate.isAfter(lastGeneratedDate)
-            }
-        ) {
-            return "Backup contains generated occurrences after rule metadata"
-        }
         return null
     }
 
@@ -425,12 +389,6 @@ object BackupValidator {
         val recurrenceRuleId: Long,
         val operationalDate: String,
         val sequenceItemId: Long?,
-    )
-
-    private data class RuleDateRange(
-        val startDate: LocalDate,
-        val endDate: LocalDate?,
-        val lastGeneratedDate: LocalDate?,
     )
 
     private val INTERVAL_RULE_TYPE_NAMES = setOf(

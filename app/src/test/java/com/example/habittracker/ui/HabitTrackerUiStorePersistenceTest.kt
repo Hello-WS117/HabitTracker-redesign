@@ -2,6 +2,9 @@ package com.example.habittracker.ui
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.habittracker.backup.BackupRepository
+import com.example.habittracker.backup.BackupValidator
+import com.example.habittracker.data.HabitRepository
 import com.example.habittracker.data.OccurrenceStatus
 import com.example.habittracker.data.RuleType
 import com.example.habittracker.data.SkipBlockedDaysBehavior
@@ -22,6 +25,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -146,6 +150,42 @@ class HabitTrackerUiStorePersistenceTest {
         assertEquals(startDate.plusDays(14), loadedRetest.startDate)
         assertEquals(startDate.plusDays(15), loadedBuild.startDate)
         assertEquals(listOf("O2", "CO2"), loadedBuild.sequenceItems)
+    }
+
+    @Test
+    fun achillesImportCanAdvanceAndCreateACompleteBackup() = runTest {
+        val source = requireNotNull(
+            javaClass.getResource("/phase-import/achilles-rehab-ai-output.txt"),
+        ).readText()
+        val parsed = parsePhaseImport(source)
+        assertTrue(parsed.issues.isEmpty())
+        val startDate = LocalDate.of(2026, 8, 1)
+        val store = HabitTrackerUiStore(
+            appContext = context,
+            scope = this,
+            enqueueMaintenance = { _, _ -> },
+            configureAutoBackup = { _, _ -> },
+        )
+        store.reloadFromDatabase()
+
+        store.importPhases(parsed.phases, startDate)?.join()
+        val firstPhase = dao.allRoutinePhases().minBy { it.position }
+        val advanceDate = startDate.plusDays(firstPhase.minimumDays.toLong())
+        assertTrue(HabitRepository(database).advanceRoutinePhase(firstPhase.id, advanceDate))
+
+        val backup = BackupRepository(context = context, database = database).createBackup()
+        assertNull(BackupValidator.validate(backup))
+        assertEquals(4, backup.routinePhases.size)
+        assertTrue(backup.sequenceExercises.isNotEmpty())
+        val firstRule = backup.recurrenceRules.single { it.taskId == firstPhase.taskId }
+        val firstEndDate = LocalDate.parse(requireNotNull(firstRule.endDate))
+        assertTrue(
+            backup.scheduledOccurrences.none {
+                it.taskId == firstPhase.taskId &&
+                    it.status == OccurrenceStatus.PENDING.name &&
+                    LocalDate.parse(it.operationalDate).isAfter(firstEndDate)
+            },
+        )
     }
 
     @Test
@@ -508,10 +548,17 @@ class HabitTrackerUiStorePersistenceTest {
     }
 
     private suspend fun clearDatabase() {
+        dao.deleteAllCycleLogs()
         dao.deleteAllLogs()
+        dao.deleteAllOccurrenceExerciseChecks()
         dao.deleteAllOccurrences()
+        dao.deleteAllSequenceExercises()
         dao.deleteAllSequenceItems()
         dao.deleteAllSequences()
+        dao.deleteAllRoutinePhases()
+        dao.deleteAllRoutinePlans()
+        dao.deleteAllCycleMemberships()
+        dao.deleteAllCycleGroups()
         dao.deleteAllRules()
         dao.deleteAllTasks()
     }

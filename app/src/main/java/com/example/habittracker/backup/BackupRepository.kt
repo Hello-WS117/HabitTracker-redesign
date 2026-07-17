@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
 import androidx.room.withTransaction
+import com.example.habittracker.data.HabitRepository
 import com.example.habittracker.data.LogAction
 import com.example.habittracker.data.local.CompletionLogEntity
 import com.example.habittracker.data.local.HabitDatabase
@@ -259,6 +260,7 @@ class BackupRepository internal constructor(
     }
 
     suspend fun createBackup(): HabitBackupV1 {
+        HabitRepository(database).repairDerivedDataConsistency()
         val settings = settingsRepository.settings.first()
         val backup = database.withTransaction {
             val cycleGroups = dao.allCycleGroups()
@@ -533,6 +535,7 @@ class BackupRepository internal constructor(
         val previous = currentConvertedBackup()
         return try {
             restoreConvertedBackup(converted)
+            HabitRepository(database).repairDerivedDataConsistency()
             settingsRepository.restore(converted.settings)
             ReminderScheduler(context).schedule(converted.settings)
             insertRestoreAuditLog(converted)

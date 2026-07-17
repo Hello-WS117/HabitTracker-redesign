@@ -38,6 +38,34 @@ interface HabitDao {
     @Query("SELECT * FROM recurrence_rules WHERE startsAfterTaskId = :taskId")
     suspend fun rulesStartingAfterTask(taskId: Long): List<RecurrenceRuleEntity>
 
+    @Query(
+        """
+        UPDATE recurrence_rules
+        SET startsAfterTaskId = NULL, updatedAt = :updatedAt
+        WHERE startsAfterTaskId = :taskId
+        """,
+    )
+    suspend fun clearRulesStartingAfterTask(
+        taskId: Long,
+        updatedAt: java.time.LocalDateTime,
+    ): Int
+
+    @Query(
+        """
+        UPDATE recurrence_rules
+        SET startsAfterTaskId = NULL, updatedAt = :updatedAt
+        WHERE startsAfterTaskId IS NOT NULL
+          AND (
+              startsAfterTaskId = taskId
+              OR NOT EXISTS (
+                  SELECT 1 FROM tasks
+                  WHERE tasks.id = recurrence_rules.startsAfterTaskId
+              )
+          )
+        """,
+    )
+    suspend fun clearInvalidStartsAfterReferences(updatedAt: java.time.LocalDateTime): Int
+
     @Query("SELECT * FROM recurrence_rules")
     suspend fun allRules(): List<RecurrenceRuleEntity>
 
@@ -218,6 +246,31 @@ interface HabitDao {
 
     @Query(
         """
+        DELETE FROM scheduled_occurrences
+        WHERE taskId = :taskId
+          AND recurrenceRuleId = :ruleId
+          AND status = 'PENDING'
+          AND (scheduledDate > :endDate OR operationalDate > :endDate)
+        """,
+    )
+    suspend fun deletePendingOccurrencesAfterDate(
+        taskId: Long,
+        ruleId: Long,
+        endDate: LocalDate,
+    ): Int
+
+    @Query(
+        """
+        DELETE FROM scheduled_occurrences
+        WHERE taskId = :taskId
+          AND recurrenceRuleId = :ruleId
+          AND status = 'PENDING'
+        """,
+    )
+    suspend fun deleteAllPendingOccurrencesForRule(taskId: Long, ruleId: Long): Int
+
+    @Query(
+        """
         UPDATE scheduled_occurrences
         SET status = 'MISSED', updatedAt = :updatedAt
         WHERE operationalDate < :currentOperationalDate
@@ -309,6 +362,9 @@ interface HabitDao {
 
     @Query("DELETE FROM workout_sequences WHERE taskId = :taskId")
     suspend fun deleteSequenceForTask(taskId: Long): Int
+
+    @Query("DELETE FROM workout_sequences WHERE id = :sequenceId")
+    suspend fun deleteSequenceById(sequenceId: Long): Int
 
     @Query("SELECT * FROM scheduled_occurrences")
     suspend fun allOccurrences(): List<ScheduledOccurrenceEntity>

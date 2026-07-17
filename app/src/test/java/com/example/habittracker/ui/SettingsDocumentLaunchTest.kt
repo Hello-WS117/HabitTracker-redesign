@@ -70,6 +70,18 @@ class SettingsDocumentLaunchTest {
     }
 
     @Test
+    fun backupStatusIncludesTheSpecificLocalValidationProblem() {
+        val error = IllegalStateException(
+            "Local data cannot be exported: Backup contains a sequence task without a sequence",
+        )
+
+        assertEquals(
+            "Backup failed: local data validation failed: a sequence task without a sequence",
+            manualBackupFailureStatus(error),
+        )
+    }
+
+    @Test
     fun launchRestoreDocumentUsesJsonAndFallbackMimeTypes() {
         var launchedMimeTypes: Array<String>? = null
         var unavailable = false

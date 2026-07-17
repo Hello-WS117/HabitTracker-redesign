@@ -423,32 +423,32 @@ class BackupValidatorTest {
     }
 
     @Test
-    fun occurrenceAfterLastGeneratedDateFailsValidation() {
+    fun occurrenceAfterLastGeneratedDateRemainsRestorable() {
         val backup = validBackup().copy(
             recurrenceRules = listOf(validRule(startDate = "2026-05-01", lastGeneratedDate = "2026-05-19")),
             scheduledOccurrences = listOf(validOccurrence(scheduledDate = "2026-05-20")),
         )
 
-        assertEquals("Backup contains generated occurrences after rule metadata", BackupValidator.validate(backup))
+        assertEquals(null, BackupValidator.validate(backup))
     }
 
     @Test
-    fun occurrenceBeforeRuleStartDateFailsValidation() {
+    fun pendingOccurrenceBeforeRuleStartDateRemainsRestorable() {
         val backup = validBackup().copy(
             scheduledOccurrences = listOf(validOccurrence(scheduledDate = "2026-05-19", status = "PENDING")),
         )
 
-        assertEquals("Backup contains occurrences outside recurrence rule date range", BackupValidator.validate(backup))
+        assertEquals(null, BackupValidator.validate(backup))
     }
 
     @Test
-    fun occurrenceAfterRuleEndDateFailsValidation() {
+    fun pendingOccurrenceAfterRuleEndDateRemainsRestorable() {
         val backup = validBackup().copy(
             recurrenceRules = listOf(validRule(endDate = "2026-05-21", lastGeneratedDate = "2026-05-21")),
             scheduledOccurrences = listOf(validOccurrence(scheduledDate = "2026-05-22", status = "PENDING")),
         )
 
-        assertEquals("Backup contains occurrences outside recurrence rule date range", BackupValidator.validate(backup))
+        assertEquals(null, BackupValidator.validate(backup))
     }
 
     @Test
@@ -476,14 +476,14 @@ class BackupValidatorTest {
     }
 
     @Test
-    fun lastGeneratedDateBeforeRuleStartDateFailsValidation() {
+    fun lastGeneratedDateBeforeRuleStartDateRemainsRestorable() {
         val backup = validBackup().copy(
             recurrenceRules = listOf(validRule(lastGeneratedDate = "2026-05-19")),
             scheduledOccurrences = emptyList(),
             completionLogs = emptyList(),
         )
 
-        assertEquals("Backup contains invalid recurrence generation metadata", BackupValidator.validate(backup))
+        assertEquals(null, BackupValidator.validate(backup))
     }
 
     private fun validBackup(): HabitBackupV1 {

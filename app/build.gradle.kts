@@ -40,8 +40,8 @@ android {
         applicationId = "com.example.habittracker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 52
-        versionName = "1.0.51"
+        versionCode = 53
+        versionName = "1.0.52"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
