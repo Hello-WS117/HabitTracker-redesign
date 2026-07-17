@@ -20,7 +20,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.habittracker.backup.BackupRepository
-import com.example.habittracker.backup.manualBackupFileName
+import com.example.habittracker.backup.manualBackupPendingFileName
 import com.example.habittracker.data.CycleRestartBehavior
 import com.example.habittracker.data.CycleRestartTiming
 import com.example.habittracker.data.ExerciseCheckStatus
@@ -4818,19 +4818,9 @@ private fun SettingsScreen(store: HabitTrackerUiStore) {
         ActivityResultContracts.CreateDocument("application/json"),
     ) { uri ->
         if (uri == null) {
-            store.setBackupTarget(null)
+            store.cancelPreparedManualBackup()
         } else {
-            store.backupStatus = "Writing backup..."
-            scope.launch {
-                val result = backupRepository.exportToUri(uri)
-                if (result.isSuccess) {
-                    store.reloadSettings()
-                }
-                store.backupStatus = result.fold(
-                    onSuccess = { "Backup exported to selected document" },
-                    onFailure = { "Backup failed: ${it.message ?: "unknown error"}" },
-                )
-            }
+            store.completePreparedManualBackup(uri)
         }
     }
     val restoreLauncher = rememberLauncherForActivityResult(
@@ -5039,6 +5029,13 @@ private fun SettingsScreen(store: HabitTrackerUiStore) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (store.settings.backupLastVerifiedBytes > 0L) {
+                    Text(
+                        text = "Last verified size: ${backupByteCountLabel(store.settings.backupLastVerifiedBytes)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     text = "Auto backup: ${autoBackupSummary(store.settings)}",
                     style = MaterialTheme.typography.bodySmall,
@@ -5051,12 +5048,16 @@ private fun SettingsScreen(store: HabitTrackerUiStore) {
                     Button(
                         modifier = Modifier.testTag("settings-backup-button"),
                         onClick = {
-                            launchBackupDocument(
-                                launch = { fileName -> backupLauncher.launch(fileName) },
-                                onNoDocumentPicker = {
-                                    store.backupStatus = "Backup unavailable: no document picker installed"
-                                },
-                            )
+                            store.prepareManualBackup { fileName ->
+                                launchBackupDocument(
+                                    fileName = fileName,
+                                    launch = backupLauncher::launch,
+                                    onNoDocumentPicker = {
+                                        store.cancelPreparedManualBackup()
+                                        store.backupStatus = "Backup unavailable: no document picker installed"
+                                    },
+                                )
+                            }
                         },
                     ) {
                         Icon(Icons.Filled.Backup, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -5130,6 +5131,14 @@ private fun SettingsScreen(store: HabitTrackerUiStore) {
                     ) {
                         Text(if (store.settings.autoBackupFolderUri.isBlank()) "Choose folder" else "Change folder")
                     }
+                    if (store.settings.autoBackupFolderUri.isNotBlank()) {
+                        OutlinedButton(
+                            modifier = Modifier.testTag("settings-auto-backup-run-now-button"),
+                            onClick = { store.runAutoBackupNow() },
+                        ) {
+                            Text("Back up to folder now")
+                        }
+                    }
                 }
                 if (pendingRestoreUri != null) {
                     Text(
@@ -5144,12 +5153,16 @@ private fun SettingsScreen(store: HabitTrackerUiStore) {
                         OutlinedButton(
                             modifier = Modifier.testTag("settings-backup-first-button"),
                             onClick = {
-                                launchBackupDocument(
-                                    launch = { fileName -> backupLauncher.launch(fileName) },
-                                    onNoDocumentPicker = {
-                                        store.backupStatus = "Backup unavailable: no document picker installed"
-                                    },
-                                )
+                                store.prepareManualBackup { fileName ->
+                                    launchBackupDocument(
+                                        fileName = fileName,
+                                        launch = backupLauncher::launch,
+                                        onNoDocumentPicker = {
+                                            store.cancelPreparedManualBackup()
+                                            store.backupStatus = "Backup unavailable: no document picker installed"
+                                        },
+                                    )
+                                }
                             },
                         ) {
                             Text("Back up first")
@@ -5206,7 +5219,15 @@ private fun autoBackupSummary(settings: ReminderSettingsUi): String {
     return when {
         !settings.autoBackupEnabled -> "Off"
         settings.autoBackupFolderUri.isBlank() -> "Needs folder"
-        settings.autoBackupLastRunAt.isNotBlank() -> "Every ${settings.autoBackupIntervalDays.dayCountLabel()}, last ${settings.autoBackupLastRunAt}"
+        settings.autoBackupLastFailureAt.isNotBlank() &&
+            settings.autoBackupLastFailureAt >= settings.autoBackupLastRunAt ->
+            "Last attempt failed: ${settings.autoBackupLastFailureReason.ifBlank { "will retry" }}"
+        settings.autoBackupLastRunAt.isNotBlank() -> buildString {
+            append("Every ${settings.autoBackupIntervalDays.dayCountLabel()}, last ${settings.autoBackupLastRunAt}")
+            if (settings.backupLastVerifiedBytes > 0L) {
+                append(" (${backupByteCountLabel(settings.backupLastVerifiedBytes)} verified)")
+            }
+        }
         else -> "Every ${settings.autoBackupIntervalDays.dayCountLabel()}, not run yet"
     }
 }
@@ -5229,11 +5250,12 @@ internal fun restoreFailureStatus(error: Throwable): String {
 }
 
 internal fun launchBackupDocument(
+    fileName: String = manualBackupPendingFileName(),
     launch: (String) -> Unit,
     onNoDocumentPicker: () -> Unit,
 ) {
     try {
-        launch(manualBackupFileName())
+        launch(fileName)
     } catch (_: ActivityNotFoundException) {
         onNoDocumentPicker()
     }

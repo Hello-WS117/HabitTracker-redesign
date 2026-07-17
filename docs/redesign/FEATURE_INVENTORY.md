@@ -1,6 +1,6 @@
 # Current Feature Inventory
 
-This document describes the user-visible behavior of HabitTracker version 1.0.48. It is a preservation contract for a UI redesign, not a proposal for new behavior.
+This document describes the user-visible behavior of HabitTracker version 1.0.49. It is a preservation contract for a UI redesign, not a proposal for new behavior.
 
 ## Product Model
 
@@ -339,10 +339,13 @@ The Settings destination includes:
 ## Backup And Restore
 
 - Backup format is versioned JSON with schema version 1.
-- Manual backup uses Android's document picker and a timestamped filename.
-- Automatic backup uses a user-selected document-tree folder and WorkManager.
+- Manual backup stages and validates the complete payload in app-private storage before opening Android's document picker.
+- Manual and automatic exports use a `.pending` destination and expose the final `.json` file only after verification succeeds.
+- Automatic backup uses a user-selected document-tree folder and WorkManager with retry backoff after provider failures.
 - A backup includes tasks, rules, occurrences, logs, sequences, exercises, exercise checks, routine plans/phases, auto-restart data, and settings.
-- Every backup write is read back, checked for non-zero size, byte equality, parseability, and schema validity.
+- Every backup write is read back, checked for non-zero size, exact byte and provider-size equality, parseability, and schema validity.
+- A verified app-private safety copy is retained before each external export.
+- Settings reports the last verified byte size and the latest automatic-backup failure reason, and allows an immediate folder backup.
 - Restore validates size, IDs, references, dates, enum values, sequence positions, and status relationships before replacing data.
 - Restore requires explicit confirmation and offers Back up first.
 - A failed restore leaves existing data intact.

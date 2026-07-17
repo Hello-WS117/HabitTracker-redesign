@@ -2,6 +2,7 @@ package com.example.habittracker.ui
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -12,6 +13,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.room.withTransaction
+import com.example.habittracker.backup.BackupRepository
+import com.example.habittracker.backup.PreparedManualBackup
 import com.example.habittracker.data.CycleRestartBehavior
 import com.example.habittracker.data.CycleRestartTiming
 import com.example.habittracker.data.ExerciseCheckStatus
@@ -67,6 +70,33 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 private const val ROUTINE_PHASE_EXTENSION_DAYS = 7L
+
+internal fun backupByteCountLabel(byteCount: Long): String {
+    val safeBytes = byteCount.coerceAtLeast(0L)
+    return if (safeBytes < 1024L) {
+        "$safeBytes bytes"
+    } else {
+        "${(safeBytes + 512L) / 1024L} KB"
+    }
+}
+
+internal fun backupFailureLabel(error: Throwable): String {
+    val message = error.message.orEmpty()
+    return when {
+        error is SecurityException -> "folder permission expired"
+        message.contains("empty", ignoreCase = true) -> "destination stayed empty"
+        message.contains("file size", ignoreCase = true) -> "destination reported the wrong size"
+        message.contains("did not match", ignoreCase = true) -> "destination changed the backup data"
+        message.contains("incomplete", ignoreCase = true) -> "destination did not finish uploading"
+        message.contains("finalize", ignoreCase = true) -> "destination could not finalize the file"
+        message.contains("Could not open", ignoreCase = true) -> "destination could not be opened"
+        else -> "provider write failed"
+    }
+}
+
+internal fun manualBackupFailureStatus(error: Throwable): String {
+    return "Backup failed: ${backupFailureLabel(error)}"
+}
 
 enum class AppDestination(val label: String, val marker: String) {
     Today("Today", "T"),
@@ -267,10 +297,13 @@ data class ReminderSettingsUi(
     val defaultBlockedDays: Set<DayOfWeek> = emptySet(),
     val themePreference: String = "system",
     val backupLastExportedAt: String = "",
+    val backupLastVerifiedBytes: Long = 0L,
     val autoBackupEnabled: Boolean = false,
     val autoBackupIntervalDays: Int = 7,
     val autoBackupFolderUri: String = "",
     val autoBackupLastRunAt: String = "",
+    val autoBackupLastFailureAt: String = "",
+    val autoBackupLastFailureReason: String = "",
 )
 
 data class HabitTaskDraft(
@@ -379,6 +412,8 @@ class HabitTrackerUiStore(
     private val repository = database?.let { HabitRepository(it) }
     private val settingsRepository = appContext?.let { AppSettingsRepository(it) }
     private val reminderScheduler = appContext?.let { ReminderScheduler(it) }
+    private val backupRepository = appContext?.let { BackupRepository(it) }
+    private var preparedManualBackup: PreparedManualBackup? = null
     private var nextTaskId = 10
     private var nextOccurrenceId = 500
     private var nextLogId = 900
@@ -2175,6 +2210,83 @@ class HabitTrackerUiStore(
         addLog(tasks.firstOrNull()?.id ?: 0, null, HabitLogAction.Backup, backupStatus)
     }
 
+    fun prepareManualBackup(launchDocument: (String) -> Unit): Job? {
+        val activeRepository = backupRepository ?: run {
+            backupStatus = "Backup unavailable"
+            return null
+        }
+        backupStatus = "Preparing and validating backup..."
+        return scope?.launch {
+            val result = activeRepository.prepareManualBackup()
+            result.fold(
+                onSuccess = { prepared ->
+                    preparedManualBackup = prepared
+                    backupStatus = "Backup prepared: ${backupByteCountLabel(prepared.byteCount.toLong())}"
+                    launchDocument(prepared.pendingDisplayName)
+                },
+                onFailure = { error ->
+                    preparedManualBackup = null
+                    backupStatus = manualBackupFailureStatus(error)
+                },
+            )
+        }
+    }
+
+    fun completePreparedManualBackup(uri: Uri): Job? {
+        val activeRepository = backupRepository ?: run {
+            backupStatus = "Backup unavailable"
+            return null
+        }
+        val prepared = preparedManualBackup ?: run {
+            backupStatus = "Backup failed: prepared data was unavailable"
+            scope?.launch { activeRepository.discardPendingDocument(uri) }
+            return null
+        }
+        preparedManualBackup = null
+        backupStatus = "Uploading and verifying backup..."
+        return scope?.launch {
+            val result = activeRepository.exportPreparedManualBackup(uri, prepared)
+            if (result.isSuccess) reloadSettings()
+            backupStatus = result.fold(
+                onSuccess = { receipt ->
+                    "Backup verified: ${backupByteCountLabel(receipt.byteCount.toLong())}"
+                },
+                onFailure = ::manualBackupFailureStatus,
+            )
+        }
+    }
+
+    fun cancelPreparedManualBackup(): Job? {
+        val prepared = preparedManualBackup
+        preparedManualBackup = null
+        backupStatus = "Backup cancelled"
+        return scope?.launch {
+            backupRepository?.discardPreparedManualBackup(prepared)
+        }
+    }
+
+    fun runAutoBackupNow(): Job? {
+        val activeRepository = backupRepository ?: run {
+            backupStatus = "Auto backup unavailable"
+            return null
+        }
+        val folderUri = settings.autoBackupFolderUri.takeIf { it.isNotBlank() } ?: run {
+            backupStatus = "Choose an auto backup folder first"
+            return null
+        }
+        backupStatus = "Uploading and verifying auto backup..."
+        return scope?.launch {
+            val result = activeRepository.exportToAutoBackupFolder(Uri.parse(folderUri))
+            reloadSettings()
+            backupStatus = result.fold(
+                onSuccess = { receipt ->
+                    "Auto backup verified: ${backupByteCountLabel(receipt.byteCount.toLong())}"
+                },
+                onFailure = { error -> "Auto backup failed: ${backupFailureLabel(error)}" },
+            )
+        }
+    }
+
     fun setRestoreSource(uriDescription: String?) {
         restoreStatus = if (uriDescription == null) {
             "Restore cancelled"
@@ -3152,10 +3264,13 @@ private fun ReminderSettingsUi.toReminderSnapshot(): AppSettingsSnapshot {
         defaultBlockedDays = defaultBlockedDays.toSettingsString(),
         themePreference = themePreference,
         backupLastExportedAt = backupLastExportedAt,
+        backupLastVerifiedBytes = backupLastVerifiedBytes,
         autoBackupEnabled = autoBackupEnabled,
         autoBackupIntervalDays = autoBackupIntervalDays,
         autoBackupFolderUri = autoBackupFolderUri,
         autoBackupLastRunAt = autoBackupLastRunAt,
+        autoBackupLastFailureAt = autoBackupLastFailureAt,
+        autoBackupLastFailureReason = autoBackupLastFailureReason,
     )
 }
 
@@ -3174,10 +3289,13 @@ private fun AppSettingsSnapshot.toUiSettings(): ReminderSettingsUi {
         defaultBlockedDays = defaultBlockedDays.toDayOfWeekSet(),
         themePreference = themePreference,
         backupLastExportedAt = backupLastExportedAt,
+        backupLastVerifiedBytes = backupLastVerifiedBytes,
         autoBackupEnabled = autoBackupEnabled,
         autoBackupIntervalDays = autoBackupIntervalDays,
         autoBackupFolderUri = autoBackupFolderUri,
         autoBackupLastRunAt = autoBackupLastRunAt,
+        autoBackupLastFailureAt = autoBackupLastFailureAt,
+        autoBackupLastFailureReason = autoBackupLastFailureReason,
     )
 }
 

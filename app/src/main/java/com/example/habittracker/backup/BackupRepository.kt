@@ -3,6 +3,7 @@ package com.example.habittracker.backup
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import androidx.room.withTransaction
 import com.example.habittracker.data.LogAction
 import com.example.habittracker.data.local.CompletionLogEntity
@@ -11,14 +12,35 @@ import com.example.habittracker.data.scheduling.OperationalDayCalculator
 import com.example.habittracker.data.settings.AppSettingsRepository
 import com.example.habittracker.data.settings.AppSettingsSnapshot
 import com.example.habittracker.reminders.ReminderScheduler
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+
+data class BackupExportReceipt(
+    val uri: Uri,
+    val byteCount: Int,
+)
+
+class PreparedManualBackup internal constructor(
+    val finalDisplayName: String,
+    val pendingDisplayName: String,
+    val byteCount: Int,
+    internal val stagedFile: File,
+)
 
 class BackupRepository(
     private val context: Context,
@@ -30,72 +52,142 @@ class BackupRepository(
         ignoreUnknownKeys = false
     },
     private val maxBackupBytes: Int = MAX_BACKUP_BYTES,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val verificationRetryDelaysMillis: List<Long> = DEFAULT_VERIFICATION_RETRY_DELAYS_MILLIS,
 ) {
     private val dao = database.habitDao()
 
-    suspend fun exportToUri(uri: Uri): Result<Unit> {
-        return runCatching {
+    suspend fun exportToUri(uri: Uri): Result<BackupExportReceipt> = withContext(ioDispatcher) {
+        try {
+            val timestamp = LocalDateTime.now()
             val encodedBytes = encodedBackupBytes()
+            writeLocalSafetyCopy(encodedBytes)
             writeAndVerifyBackupBytes(uri, encodedBytes)
-            settingsRepository.setBackupLastExportedAt(LocalDateTime.now().toString())
-        }.onFailure {
+            settingsRepository.recordBackupSuccess(timestamp.toString(), encodedBytes.size.toLong(), automatic = false)
+            Result.success(BackupExportReceipt(uri, encodedBytes.size))
+        } catch (cancellation: CancellationException) {
             deleteDocumentQuietly(uri)
+            throw cancellation
+        } catch (error: Throwable) {
+            deleteDocumentQuietly(uri)
+            Result.failure(error)
         }
     }
 
-    suspend fun exportToAutoBackupFolder(folderUri: Uri, timestamp: LocalDateTime = LocalDateTime.now()): Result<Uri> {
-        return runCatching {
+    suspend fun prepareManualBackup(timestamp: LocalDateTime = LocalDateTime.now()): Result<PreparedManualBackup> =
+        withContext(ioDispatcher) {
+            try {
+                val encodedBytes = encodedBackupBytes()
+                writeLocalSafetyCopy(encodedBytes)
+                val stagedFile = File(backupSafetyDirectory(), MANUAL_BACKUP_STAGING_FILE_NAME)
+                writeAtomicFile(stagedFile, encodedBytes)
+                Result.success(
+                    PreparedManualBackup(
+                        finalDisplayName = manualBackupFileName(timestamp),
+                        pendingDisplayName = manualBackupPendingFileName(timestamp),
+                        byteCount = encodedBytes.size,
+                        stagedFile = stagedFile,
+                    ),
+                )
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                Result.failure(error)
+            }
+        }
+
+    suspend fun discardPreparedManualBackup(prepared: PreparedManualBackup?) = withContext(ioDispatcher) {
+        prepared?.stagedFile?.delete()
+    }
+
+    suspend fun discardPendingDocument(uri: Uri) = withContext(ioDispatcher) {
+        deleteDocumentQuietly(uri)
+    }
+
+    suspend fun exportPreparedManualBackup(
+        uri: Uri,
+        prepared: PreparedManualBackup,
+        timestamp: LocalDateTime = LocalDateTime.now(),
+    ): Result<BackupExportReceipt> = withContext(ioDispatcher) {
+        var cleanupUri: Uri? = uri
+        try {
+            val encodedBytes = readStagedBackup(prepared)
+            writeAndVerifyBackupBytes(uri, encodedBytes)
+            val finalizedUri = DocumentsContract.renameDocument(
+                context.contentResolver,
+                uri,
+                prepared.finalDisplayName,
+            ) ?: error("Backup provider could not finalize the verified file")
+            cleanupUri = finalizedUri
+            verifyWrittenBackupWithRetry(finalizedUri, encodedBytes)
+            settingsRepository.recordBackupSuccess(timestamp.toString(), encodedBytes.size.toLong(), automatic = false)
+            prepared.stagedFile.delete()
+            cleanupUri = null
+            Result.success(BackupExportReceipt(finalizedUri, encodedBytes.size))
+        } catch (cancellation: CancellationException) {
+            cleanupUri?.let(::deleteDocumentQuietly)
+            throw cancellation
+        } catch (error: Throwable) {
+            cleanupUri?.let(::deleteDocumentQuietly)
+            Result.failure(error)
+        }
+    }
+
+    suspend fun exportToAutoBackupFolder(
+        folderUri: Uri,
+        timestamp: LocalDateTime = LocalDateTime.now(),
+    ): Result<BackupExportReceipt> = withContext(ioDispatcher) {
+        var cleanupUri: Uri? = null
+        try {
             val encodedBytes = encodedBackupBytes()
+            writeLocalSafetyCopy(encodedBytes)
             val fileName = autoBackupFileName(timestamp)
             val treeDocumentUri = DocumentsContract.buildDocumentUriUsingTree(
                 folderUri,
                 DocumentsContract.getTreeDocumentId(folderUri),
             )
-            val temporaryDestination = DocumentsContract.createDocument(
+            val pendingDestination = DocumentsContract.createDocument(
                 context.contentResolver,
                 treeDocumentUri,
                 BackupDocumentContracts.MIME_TYPE,
                 autoBackupTemporaryFileName(timestamp),
             ) ?: error("Could not create backup file")
-            var cleanupUri: Uri? = temporaryDestination
-            val destination = try {
-                writeAndVerifyBackupBytes(temporaryDestination, encodedBytes)
-                val renamedDestination = runCatching {
-                    DocumentsContract.renameDocument(context.contentResolver, temporaryDestination, fileName)
-                }.getOrNull()
-                if (renamedDestination != null) {
-                    cleanupUri = renamedDestination
-                    verifyWrittenBackup(renamedDestination, encodedBytes)
-                    renamedDestination
-                } else {
-                    deleteDocumentQuietly(temporaryDestination)
-                    cleanupUri = null
-                    val directDestination = DocumentsContract.createDocument(
-                        context.contentResolver,
-                        treeDocumentUri,
-                        BackupDocumentContracts.MIME_TYPE,
-                        fileName,
-                    ) ?: error("Could not create backup file")
-                    cleanupUri = directDestination
-                    writeAndVerifyBackupBytes(directDestination, encodedBytes)
-                    directDestination
-                }
-            } catch (error: Throwable) {
-                cleanupUri?.let { deleteDocumentQuietly(it) }
-                throw error
-            }
-            cleanupUri = null
+            cleanupUri = pendingDestination
+            writeAndVerifyBackupBytes(pendingDestination, encodedBytes)
+            val finalizedDestination = DocumentsContract.renameDocument(
+                context.contentResolver,
+                pendingDestination,
+                fileName,
+            ) ?: error("Backup provider could not finalize the verified file")
+            cleanupUri = finalizedDestination
+            verifyWrittenBackupWithRetry(finalizedDestination, encodedBytes)
             val exportedAt = timestamp.toString()
-            settingsRepository.setBackupLastExportedAt(exportedAt)
-            settingsRepository.setAutoBackupLastRunAt(exportedAt)
-            destination
+            settingsRepository.recordBackupSuccess(exportedAt, encodedBytes.size.toLong(), automatic = true)
+            cleanupUri = null
+            Result.success(BackupExportReceipt(finalizedDestination, encodedBytes.size))
+        } catch (cancellation: CancellationException) {
+            cleanupUri?.let(::deleteDocumentQuietly)
+            throw cancellation
+        } catch (error: Throwable) {
+            cleanupUri?.let(::deleteDocumentQuietly)
+            runCatching {
+                settingsRepository.recordAutoBackupFailure(
+                    timestamp = LocalDateTime.now().toString(),
+                    reason = backupFailureReason(error),
+                )
+            }
+            Result.failure(error)
         }
     }
 
-    suspend fun restoreFromUri(uri: Uri): Result<Unit> {
-        return runCatching {
+    suspend fun restoreFromUri(uri: Uri): Result<Unit> = withContext(ioDispatcher) {
+        try {
             val encoded = readBackupText(uri)
-            restoreFromJson(encoded).getOrThrow()
+            restoreFromJson(encoded)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            Result.failure(error)
         }
     }
 
@@ -135,29 +227,38 @@ class BackupRepository(
         val backup = createBackup()
         val encodedBytes = json.encodeToString(HabitBackupV1.serializer(), backup)
             .toByteArray(Charsets.UTF_8)
+        check(encodedBytes.isNotEmpty()) { "Backup payload was empty before writing" }
         check(encodedBytes.size <= maxBackupBytes) { "Backup file is too large" }
         return encodedBytes
     }
 
-    private fun writeAndVerifyBackupBytes(uri: Uri, encodedBytes: ByteArray) {
-        context.contentResolver.openOutputStream(uri, "wt")?.use { stream ->
-            stream.write(encodedBytes)
-            stream.flush()
-        } ?: error("Could not open backup destination")
+    private suspend fun writeAndVerifyBackupBytes(uri: Uri, encodedBytes: ByteArray) {
+        writeBackupBytes(uri, encodedBytes)
         verifyWrittenBackupWithRetry(uri, encodedBytes)
     }
 
-    private fun verifyWrittenBackupWithRetry(uri: Uri, expectedBytes: ByteArray) {
+    private fun writeBackupBytes(uri: Uri, encodedBytes: ByteArray) {
+        val output = context.contentResolver.openOutputStream(uri, BACKUP_WRITE_MODE)
+            ?: error("Could not open backup destination")
+        output.use {
+            output.write(encodedBytes)
+            output.flush()
+            (output as? FileOutputStream)?.let { fileOutput ->
+                runCatching { fileOutput.fd.sync() }
+            }
+        }
+    }
+
+    private suspend fun verifyWrittenBackupWithRetry(uri: Uri, expectedBytes: ByteArray) {
         var lastFailure: Throwable? = null
-        repeat(5) { attempt ->
+        val attempts = listOf(0L) + verificationRetryDelaysMillis
+        attempts.forEach { delayMillis ->
+            if (delayMillis > 0L) delay(delayMillis)
             try {
                 verifyWrittenBackup(uri, expectedBytes)
                 return
             } catch (error: Throwable) {
                 lastFailure = error
-                if (attempt < 4) {
-                    Thread.sleep(300L)
-                }
             }
         }
         throw lastFailure ?: IllegalStateException("Backup verification failed")
@@ -167,6 +268,12 @@ class BackupRepository(
         val writtenBytes = readBackupBytes(uri)
         check(writtenBytes.isNotEmpty()) { "Backup file was empty after writing" }
         check(writtenBytes.contentEquals(expectedBytes)) { "Backup file did not match written data" }
+        readDocumentMetadata(uri)?.let { metadata ->
+            metadata.size?.takeIf { it >= 0L }?.let { size ->
+                check(size == expectedBytes.size.toLong()) { "Backup provider reported an incorrect file size" }
+            }
+            check(metadata.isPartial != true) { "Backup provider still reported an incomplete file" }
+        }
         val backup = try {
             json.decodeFromString(HabitBackupV1.serializer(), writtenBytes.toString(Charsets.UTF_8))
         } catch (parseError: IllegalArgumentException) {
@@ -175,6 +282,30 @@ class BackupRepository(
             throw IllegalStateException("Backup verification failed", parseError)
         }
         BackupValidator.validate(backup)?.let { error("Backup verification failed: $it") }
+    }
+
+    private fun readDocumentMetadata(uri: Uri): DocumentMetadata? {
+        return runCatching {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.SIZE, DocumentsContract.Document.COLUMN_FLAGS),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                val flagsIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_FLAGS)
+                val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else null
+                val flags = if (flagsIndex >= 0 && !cursor.isNull(flagsIndex)) cursor.getInt(flagsIndex) else null
+                DocumentMetadata(
+                    size = size,
+                    isPartial = flags?.let {
+                        it and DocumentsContract.Document.FLAG_PARTIAL != 0
+                    },
+                )
+            }
+        }.getOrNull()
     }
 
     suspend fun restoreFromJson(encoded: String): Result<Unit> {
@@ -288,11 +419,62 @@ class BackupRepository(
         }
     }
 
+    private fun writeLocalSafetyCopy(encodedBytes: ByteArray) {
+        writeAtomicFile(File(backupSafetyDirectory(), LOCAL_SAFETY_BACKUP_FILE_NAME), encodedBytes)
+    }
+
+    private fun backupSafetyDirectory(): File {
+        return File(context.noBackupFilesDir, BACKUP_SAFETY_DIRECTORY_NAME).also { directory ->
+            check(directory.exists() || directory.mkdirs()) { "Could not prepare local backup safety storage" }
+        }
+    }
+
+    private fun writeAtomicFile(destination: File, encodedBytes: ByteArray) {
+        val temporary = File(destination.parentFile, "${destination.name}.tmp")
+        runCatching { temporary.delete() }
+        FileOutputStream(temporary).use { output ->
+            output.write(encodedBytes)
+            output.flush()
+            output.fd.sync()
+        }
+        check(temporary.length() == encodedBytes.size.toLong()) { "Local backup safety copy was incomplete" }
+        try {
+            Files.move(
+                temporary.toPath(),
+                destination.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (_: Throwable) {
+            Files.move(
+                temporary.toPath(),
+                destination.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        }
+        check(destination.readBytes().contentEquals(encodedBytes)) { "Local backup safety copy failed verification" }
+    }
+
+    private fun readStagedBackup(prepared: PreparedManualBackup): ByteArray {
+        check(prepared.stagedFile.isFile) { "Prepared backup is no longer available" }
+        check(prepared.stagedFile.length() in 1..maxBackupBytes.toLong()) { "Prepared backup has an invalid size" }
+        val encodedBytes = prepared.stagedFile.readBytes()
+        check(encodedBytes.size == prepared.byteCount) { "Prepared backup size changed before export" }
+        val parsed = json.decodeFromString(HabitBackupV1.serializer(), encodedBytes.toString(Charsets.UTF_8))
+        BackupValidator.validate(parsed)?.let { error("Prepared backup failed validation: $it") }
+        return encodedBytes
+    }
+
     private fun deleteDocumentQuietly(uri: Uri) {
         runCatching {
             DocumentsContract.deleteDocument(context.contentResolver, uri)
         }
     }
+
+    private data class DocumentMetadata(
+        val size: Long?,
+        val isPartial: Boolean?,
+    )
 
     private suspend fun currentConvertedBackup(): ConvertedBackup {
         return ConvertedBackup(
@@ -363,14 +545,33 @@ class BackupRepository(
 
     private companion object {
         const val MAX_BACKUP_BYTES = 10 * 1024 * 1024
+        const val BACKUP_WRITE_MODE = "w"
+        const val BACKUP_SAFETY_DIRECTORY_NAME = "backup-safety"
+        const val LOCAL_SAFETY_BACKUP_FILE_NAME = "last-verified-backup.json"
+        const val MANUAL_BACKUP_STAGING_FILE_NAME = "pending-manual-backup.json"
         val AUTO_BACKUP_FILENAME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+        val DEFAULT_VERIFICATION_RETRY_DELAYS_MILLIS = listOf(250L, 750L, 1_500L, 3_000L, 5_000L, 5_000L, 5_000L)
 
         fun autoBackupFileName(timestamp: LocalDateTime): String {
             return "personal_scheduler_backup_v1_${timestamp.format(AUTO_BACKUP_FILENAME_FORMATTER)}.json"
         }
 
         fun autoBackupTemporaryFileName(timestamp: LocalDateTime): String {
-            return "personal_scheduler_backup_v1_${timestamp.format(AUTO_BACKUP_FILENAME_FORMATTER)}.json.tmp"
+            return "personal_scheduler_backup_v1_${timestamp.format(AUTO_BACKUP_FILENAME_FORMATTER)}.json.pending"
+        }
+
+        fun backupFailureReason(error: Throwable): String {
+            val message = error.message.orEmpty()
+            return when {
+                error is SecurityException -> "Folder permission expired"
+                message.contains("empty", ignoreCase = true) -> "Destination remained empty"
+                message.contains("file size", ignoreCase = true) -> "Destination reported the wrong size"
+                message.contains("did not match", ignoreCase = true) -> "Destination changed the backup data"
+                message.contains("incomplete", ignoreCase = true) -> "Destination did not finish uploading"
+                message.contains("finalize", ignoreCase = true) -> "Destination could not finalize the backup"
+                message.contains("Could not open", ignoreCase = true) -> "Destination could not be opened"
+                else -> "Backup provider write failed"
+            }
         }
     }
 }

@@ -272,16 +272,18 @@ Entry: Settings, Backup and restore.
 ### Manual backup
 
 1. Select Back up now.
-2. Choose a destination in Android's document picker.
-3. Write a timestamped JSON document.
-4. Read it back and validate non-zero content before reporting success.
+2. Stage and validate the complete payload in app-private storage.
+3. Choose a destination in Android's document picker.
+4. Write to a `.pending` document, read it back, and verify its bytes, size, JSON, and schema.
+5. Rename the verified document to its timestamped `.json` filename before reporting success.
 
 ### Automatic backup
 
 1. Enable Auto app backup.
 2. Choose a document-tree folder.
 3. Set the interval in days.
-4. WorkManager writes and verifies backups at the configured cadence.
+4. WorkManager writes and verifies `.pending` backups at the configured cadence, then finalizes only valid files.
+5. Failed provider writes are recorded and retried with backoff; Back up to folder now runs the same process immediately.
 
 ### Restore
 

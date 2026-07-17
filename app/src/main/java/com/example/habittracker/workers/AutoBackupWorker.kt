@@ -2,6 +2,7 @@ package com.example.habittracker.workers
 
 import android.content.Context
 import android.net.Uri
+import androidx.work.BackoffPolicy
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ListenableWorker
@@ -81,6 +82,7 @@ object AutoBackupScheduler {
         val intervalDays = settings.autoBackupIntervalDays.coerceAtLeast(1)
         return PeriodicWorkRequestBuilder<AutoBackupWorker>(intervalDays.toLong(), TimeUnit.DAYS)
             .setInitialDelay(delayUntilNextAutoBackup(settings, now), TimeUnit.MILLISECONDS)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15L, TimeUnit.MINUTES)
             .build()
     }
 

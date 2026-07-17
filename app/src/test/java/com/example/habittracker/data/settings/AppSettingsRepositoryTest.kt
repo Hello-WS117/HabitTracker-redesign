@@ -87,14 +87,38 @@ class AppSettingsRepositoryTest {
             defaultBlockedDays = "SUNDAY",
             themePreference = "light",
             backupLastExportedAt = "2026-05-19T08:00:00",
+            backupLastVerifiedBytes = 456_789L,
             autoBackupEnabled = true,
             autoBackupIntervalDays = 14,
             autoBackupFolderUri = "content://tree/restored",
             autoBackupLastRunAt = "2026-05-19T09:00:00",
+            autoBackupLastFailureAt = "2026-05-19T10:00:00",
+            autoBackupLastFailureReason = "Destination remained empty",
         )
 
         repository.restore(restored)
 
         assertEquals(restored, repository.settings.first())
+    }
+
+    @Test
+    fun verifiedAutoBackupSuccessRecordsSizeAndClearsPreviousFailure() = runTest {
+        repository.recordAutoBackupFailure(
+            timestamp = "2026-05-20T12:00:00",
+            reason = "Destination remained empty",
+        )
+
+        repository.recordBackupSuccess(
+            timestamp = "2026-05-20T12:05:00",
+            byteCount = 439_266L,
+            automatic = true,
+        )
+
+        val settings = repository.settings.first()
+        assertEquals("2026-05-20T12:05:00", settings.backupLastExportedAt)
+        assertEquals(439_266L, settings.backupLastVerifiedBytes)
+        assertEquals("2026-05-20T12:05:00", settings.autoBackupLastRunAt)
+        assertEquals("", settings.autoBackupLastFailureAt)
+        assertEquals("", settings.autoBackupLastFailureReason)
     }
 }

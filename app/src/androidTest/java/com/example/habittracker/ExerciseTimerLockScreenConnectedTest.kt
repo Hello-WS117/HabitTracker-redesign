@@ -3,6 +3,7 @@ package com.example.habittracker
 import android.Manifest
 import android.app.KeyguardManager
 import android.app.NotificationManager
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -47,7 +48,14 @@ class ExerciseTimerLockScreenConnectedTest {
             isLooping = true
         }
 
-        shell("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
+        instrumentation.uiAutomation.grantRuntimePermission(
+            context.packageName,
+            Manifest.permission.POST_NOTIFICATIONS,
+        )
+        waitUntil {
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+        }
         assertTrue(
             audioManager.requestAudioFocus(mediaFocusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED,
         )

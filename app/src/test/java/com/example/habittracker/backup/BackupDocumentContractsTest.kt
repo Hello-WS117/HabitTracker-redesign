@@ -12,7 +12,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class BackupDocumentContractsTest {
     @Test
-    fun createBackupIntentUsesSafCreateDocumentWithDefaultFilename() {
+    fun createBackupIntentUsesSafCreateDocumentWithPendingFilename() {
         val intent = BackupDocumentContracts.createBackupDocumentIntent()
 
         assertEquals(Intent.ACTION_CREATE_DOCUMENT, intent.action)
@@ -20,7 +20,7 @@ class BackupDocumentContractsTest {
         assertTrue(
             intent.getStringExtra(Intent.EXTRA_TITLE)
                 .orEmpty()
-                .matches(Regex("personal_scheduler_backup_v1_\\d{8}-\\d{6}\\.json")),
+                .matches(Regex("personal_scheduler_backup_v1_\\d{8}-\\d{6}\\.json\\.pending")),
         )
         assertTrue(intent.categories.orEmpty().contains(Intent.CATEGORY_OPENABLE))
     }

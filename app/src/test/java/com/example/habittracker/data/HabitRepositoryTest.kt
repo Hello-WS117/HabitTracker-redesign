@@ -1316,6 +1316,35 @@ class HabitRepositoryTest {
     }
 
     @Test
+    fun overdueAutoPushRefreshesShiftedScheduleBetweenMultipleMissedDays() = runTest {
+        val taskId = repository.createTaskWithRule(
+            task = task(
+                name = "Daily rehab",
+                taskType = TaskType.SIMPLE_HABIT,
+                pushable = true,
+                noActionBehavior = NoActionBehavior.AUTO_PUSH,
+            ),
+            rule = rule(
+                ruleType = RuleType.DAILY,
+                startDate = LocalDate.of(2026, 5, 20),
+            ),
+            generateThrough = LocalDate.of(2026, 5, 25),
+        )
+
+        val handled = repository.markOverduePendingMissed(LocalDate.of(2026, 5, 23))
+
+        val occurrences = dao.occurrencesForTask(taskId)
+        val pending = occurrences
+            .filter { it.status == OccurrenceStatus.PENDING }
+            .sortedBy { it.operationalDate }
+        assertEquals(3, handled)
+        assertEquals(LocalDate.of(2026, 5, 23), pending.first().operationalDate)
+        assertFalse(pending.any { it.operationalDate.isBefore(LocalDate.of(2026, 5, 23)) })
+        assertEquals(occurrences.size, occurrences.map { it.operationalDate }.distinct().size)
+        assertEquals(3, dao.logsForTask(taskId).count { it.action == LogAction.SHIFTED_FORWARD })
+    }
+
+    @Test
     fun overdueMaintenanceAutoPushesOneTimeTaskUntilCompleted() = runTest {
         val taskId = repository.createTaskWithRule(
             task = task(

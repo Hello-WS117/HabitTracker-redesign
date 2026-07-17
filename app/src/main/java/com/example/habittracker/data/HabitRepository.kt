@@ -1001,12 +1001,13 @@ class HabitRepository(
 
     suspend fun markOverduePendingMissed(currentOperationalDate: LocalDate): Int {
         return database.withTransaction {
-            val overdue = dao.pendingOccurrencesBeforeDate(currentOperationalDate)
             val now = LocalDateTime.now()
             var handled = 0
-            overdue.forEach { occurrence ->
-                val task = dao.taskById(occurrence.taskId) ?: return@forEach
-                if (task.taskType == TaskType.LONG_TERM) return@forEach
+            while (true) {
+                // A push moves every later pending row. Re-query after each decision so
+                // the next push uses those updated dates instead of a stale snapshot.
+                val occurrence = dao.nextActionablePendingOccurrenceBeforeDate(currentOperationalDate) ?: break
+                val task = dao.taskById(occurrence.taskId) ?: break
                 when (task.noActionBehavior) {
                     NoActionBehavior.AUTO_SKIP -> {
                         dao.updateOccurrence(

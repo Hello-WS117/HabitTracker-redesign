@@ -38,6 +38,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlarmManager
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -65,11 +66,18 @@ class BackupRepositoryTest {
         ShadowAlarmManager.reset()
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
         val context = ApplicationProvider.getApplicationContext<Context>()
+        File(context.noBackupFilesDir, "backup-safety").deleteRecursively()
         database = Room.inMemoryDatabaseBuilder(context, HabitDatabase::class.java)
             .allowMainThreadQueries()
             .build()
         settingsRepository = AppSettingsRepository(context)
-        repository = BackupRepository(context, database, settingsRepository, json)
+        repository = BackupRepository(
+            context = context,
+            database = database,
+            settingsRepository = settingsRepository,
+            json = json,
+            verificationRetryDelaysMillis = emptyList(),
+        )
     }
 
     @After
@@ -476,18 +484,31 @@ class BackupRepositoryTest {
         val result = repository.exportToUri(uri)
 
         assertTrue(result.isSuccess)
+        val receipt = result.getOrThrow()
         val encodedBackup = output.toString(Charsets.UTF_8.name())
         val backup = json.decodeFromString(HabitBackupV1.serializer(), encodedBackup)
+        assertEquals(uri, receipt.uri)
+        assertEquals(output.size(), receipt.byteCount)
         assertEquals(listOf("Existing task"), backup.tasks.map { it.name })
         assertEquals("SATURDAY", backup.appSettings.defaultBlockedDays)
         assertEquals("dark", backup.appSettings.themePreference)
-        assertTrue(settingsRepository.settings.first().backupLastExportedAt.isNotBlank())
+        val settings = settingsRepository.settings.first()
+        assertTrue(settings.backupLastExportedAt.isNotBlank())
+        assertEquals(output.size().toLong(), settings.backupLastVerifiedBytes)
+        val safetyCopy = File(context.noBackupFilesDir, "backup-safety/last-verified-backup.json")
+        assertEquals(output.size().toLong(), safetyCopy.length())
+        assertEquals(encodedBackup, safetyCopy.readText())
     }
 
     @Test
     fun exportToUriRejectsEmptyWrittenDocumentAndKeepsPreviousTimestamp() = runTest {
         val previousExportedAt = "2026-05-19T12:00:00"
-        settingsRepository.restore(AppSettingsSnapshot(backupLastExportedAt = previousExportedAt))
+        settingsRepository.restore(
+            AppSettingsSnapshot(
+                backupLastExportedAt = previousExportedAt,
+                backupLastVerifiedBytes = 123_456L,
+            ),
+        )
         seedExistingDatabase()
         val context = ApplicationProvider.getApplicationContext<Context>()
         val uri = Uri.parse("content://com.example.habittracker.backup/empty-after-write.json")
@@ -500,7 +521,75 @@ class BackupRepositoryTest {
         assertTrue(result.isFailure)
         assertEquals("Backup file was empty after writing", result.exceptionOrNull()?.message)
         assertTrue(output.size() > 0)
-        assertEquals(previousExportedAt, settingsRepository.settings.first().backupLastExportedAt)
+        val settings = settingsRepository.settings.first()
+        assertEquals(previousExportedAt, settings.backupLastExportedAt)
+        assertEquals(123_456L, settings.backupLastVerifiedBytes)
+    }
+
+    @Test
+    fun exportToUriWaitsForProviderReadbackInsteadOfAcceptingInitialEmptyState() = runTest {
+        seedExistingDatabase()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://com.example.habittracker.backup/delayed-commit.json")
+        val output = ByteArrayOutputStream()
+        shadowOf(context.contentResolver).registerOutputStream(uri, output)
+        shadowOf(context.contentResolver).registerInputStream(
+            uri,
+            object : InputStream() {
+                private var firstRead = true
+                private var delegate: ByteArrayInputStream? = null
+
+                override fun read(): Int {
+                    if (firstRead) {
+                        firstRead = false
+                        return -1
+                    }
+                    return stream().read()
+                }
+
+                override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                    if (firstRead) {
+                        firstRead = false
+                        return -1
+                    }
+                    return stream().read(buffer, offset, length)
+                }
+
+                private fun stream(): ByteArrayInputStream {
+                    return delegate ?: ByteArrayInputStream(output.toByteArray()).also { delegate = it }
+                }
+            },
+        )
+        val retryingRepository = BackupRepository(
+            context = context,
+            database = database,
+            settingsRepository = settingsRepository,
+            json = json,
+            verificationRetryDelaysMillis = listOf(0L),
+        )
+
+        val result = retryingRepository.exportToUri(uri)
+
+        assertTrue(result.isSuccess)
+        assertTrue(result.getOrThrow().byteCount > 0)
+    }
+
+    @Test
+    fun prepareManualBackupCreatesVerifiedLocalStageBeforeOpeningProvider() = runTest {
+        seedExistingDatabase()
+
+        val prepared = repository.prepareManualBackup(now).getOrThrow()
+
+        assertEquals("personal_scheduler_backup_v1_20260520-120000.json", prepared.finalDisplayName)
+        assertEquals("personal_scheduler_backup_v1_20260520-120000.json.pending", prepared.pendingDisplayName)
+        assertTrue(prepared.byteCount > 0)
+        assertTrue(prepared.stagedFile.isFile)
+        assertEquals(prepared.byteCount.toLong(), prepared.stagedFile.length())
+        val parsed = json.decodeFromString(HabitBackupV1.serializer(), prepared.stagedFile.readText())
+        assertEquals(listOf("Existing task"), parsed.tasks.map { it.name })
+
+        repository.discardPreparedManualBackup(prepared)
+        assertFalse(prepared.stagedFile.exists())
     }
 
     @Test

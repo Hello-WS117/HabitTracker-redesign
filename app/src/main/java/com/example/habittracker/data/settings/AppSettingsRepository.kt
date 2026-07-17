@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -26,10 +27,13 @@ data class AppSettingsSnapshot(
     val defaultBlockedDays: String = "",
     val themePreference: String = "system",
     val backupLastExportedAt: String = "",
+    val backupLastVerifiedBytes: Long = 0L,
     val autoBackupEnabled: Boolean = false,
     val autoBackupIntervalDays: Int = 7,
     val autoBackupFolderUri: String = "",
     val autoBackupLastRunAt: String = "",
+    val autoBackupLastFailureAt: String = "",
+    val autoBackupLastFailureReason: String = "",
 )
 
 class AppSettingsRepository(private val context: Context) {
@@ -47,11 +51,14 @@ class AppSettingsRepository(private val context: Context) {
                 exactAlarmPermissionPromptShown = prefs[EXACT_ALARM_PROMPT_SHOWN] ?: false,
                 defaultBlockedDays = prefs[DEFAULT_BLOCKED_DAYS] ?: "",
                 themePreference = prefs[THEME_PREFERENCE] ?: "system",
-            backupLastExportedAt = prefs[BACKUP_LAST_EXPORTED_AT] ?: "",
-            autoBackupEnabled = prefs[AUTO_BACKUP_ENABLED] ?: false,
-            autoBackupIntervalDays = (prefs[AUTO_BACKUP_INTERVAL_DAYS] ?: 7).coerceAtLeast(1),
-            autoBackupFolderUri = prefs[AUTO_BACKUP_FOLDER_URI] ?: "",
-            autoBackupLastRunAt = prefs[AUTO_BACKUP_LAST_RUN_AT] ?: "",
+                backupLastExportedAt = prefs[BACKUP_LAST_EXPORTED_AT] ?: "",
+                backupLastVerifiedBytes = (prefs[BACKUP_LAST_VERIFIED_BYTES] ?: 0L).coerceAtLeast(0L),
+                autoBackupEnabled = prefs[AUTO_BACKUP_ENABLED] ?: false,
+                autoBackupIntervalDays = (prefs[AUTO_BACKUP_INTERVAL_DAYS] ?: 7).coerceAtLeast(1),
+                autoBackupFolderUri = prefs[AUTO_BACKUP_FOLDER_URI] ?: "",
+                autoBackupLastRunAt = prefs[AUTO_BACKUP_LAST_RUN_AT] ?: "",
+                autoBackupLastFailureAt = prefs[AUTO_BACKUP_LAST_FAILURE_AT] ?: "",
+                autoBackupLastFailureReason = prefs[AUTO_BACKUP_LAST_FAILURE_REASON] ?: "",
         )
     }
 
@@ -98,6 +105,25 @@ class AppSettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { it[BACKUP_LAST_EXPORTED_AT] = timestamp }
     }
 
+    suspend fun recordBackupSuccess(timestamp: String, byteCount: Long, automatic: Boolean) {
+        context.settingsDataStore.edit {
+            it[BACKUP_LAST_EXPORTED_AT] = timestamp
+            it[BACKUP_LAST_VERIFIED_BYTES] = byteCount.coerceAtLeast(0L)
+            if (automatic) {
+                it[AUTO_BACKUP_LAST_RUN_AT] = timestamp
+                it.remove(AUTO_BACKUP_LAST_FAILURE_AT)
+                it.remove(AUTO_BACKUP_LAST_FAILURE_REASON)
+            }
+        }
+    }
+
+    suspend fun recordAutoBackupFailure(timestamp: String, reason: String) {
+        context.settingsDataStore.edit {
+            it[AUTO_BACKUP_LAST_FAILURE_AT] = timestamp
+            it[AUTO_BACKUP_LAST_FAILURE_REASON] = reason
+        }
+    }
+
     suspend fun updateAutoBackup(enabled: Boolean, intervalDays: Int, folderUri: String) {
         context.settingsDataStore.edit {
             it[AUTO_BACKUP_ENABLED] = enabled
@@ -125,10 +151,13 @@ class AppSettingsRepository(private val context: Context) {
             it[DEFAULT_BLOCKED_DAYS] = snapshot.defaultBlockedDays
             it[THEME_PREFERENCE] = snapshot.themePreference
             it[BACKUP_LAST_EXPORTED_AT] = snapshot.backupLastExportedAt
+            it[BACKUP_LAST_VERIFIED_BYTES] = snapshot.backupLastVerifiedBytes.coerceAtLeast(0L)
             it[AUTO_BACKUP_ENABLED] = snapshot.autoBackupEnabled
             it[AUTO_BACKUP_INTERVAL_DAYS] = snapshot.autoBackupIntervalDays.coerceAtLeast(1)
             it[AUTO_BACKUP_FOLDER_URI] = snapshot.autoBackupFolderUri
             it[AUTO_BACKUP_LAST_RUN_AT] = snapshot.autoBackupLastRunAt
+            it[AUTO_BACKUP_LAST_FAILURE_AT] = snapshot.autoBackupLastFailureAt
+            it[AUTO_BACKUP_LAST_FAILURE_REASON] = snapshot.autoBackupLastFailureReason
         }
     }
 
@@ -146,9 +175,12 @@ class AppSettingsRepository(private val context: Context) {
         val DEFAULT_BLOCKED_DAYS = stringPreferencesKey("defaultBlockedDays")
         val THEME_PREFERENCE = stringPreferencesKey("themePreference")
         val BACKUP_LAST_EXPORTED_AT = stringPreferencesKey("backupLastExportedAt")
+        val BACKUP_LAST_VERIFIED_BYTES = longPreferencesKey("backupLastVerifiedBytes")
         val AUTO_BACKUP_ENABLED = booleanPreferencesKey("autoBackupEnabled")
         val AUTO_BACKUP_INTERVAL_DAYS = intPreferencesKey("autoBackupIntervalDays")
         val AUTO_BACKUP_FOLDER_URI = stringPreferencesKey("autoBackupFolderUri")
         val AUTO_BACKUP_LAST_RUN_AT = stringPreferencesKey("autoBackupLastRunAt")
+        val AUTO_BACKUP_LAST_FAILURE_AT = stringPreferencesKey("autoBackupLastFailureAt")
+        val AUTO_BACKUP_LAST_FAILURE_REASON = stringPreferencesKey("autoBackupLastFailureReason")
     }
 }

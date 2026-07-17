@@ -177,12 +177,14 @@ interface HabitDao {
           AND scheduled_occurrences.status = 'PENDING'
           AND tasks.isActive = 1
           AND tasks.archived = 0
+          AND tasks.taskType != 'LONG_TERM'
         ORDER BY scheduled_occurrences.operationalDate ASC, scheduled_occurrences.id ASC
+        LIMIT 1
         """,
     )
-    suspend fun pendingOccurrencesBeforeDate(
+    suspend fun nextActionablePendingOccurrenceBeforeDate(
         currentOperationalDate: LocalDate,
-    ): List<ScheduledOccurrenceEntity>
+    ): ScheduledOccurrenceEntity?
 
     @Query(
         """

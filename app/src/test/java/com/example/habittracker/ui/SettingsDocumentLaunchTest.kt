@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class SettingsDocumentLaunchTest {
     @Test
-    fun launchBackupDocumentUsesDefaultBackupFilename() {
+    fun launchBackupDocumentUsesPendingFilenameUntilVerificationFinishes() {
         var launchedFilename: String? = null
         var unavailable = false
 
@@ -27,7 +27,7 @@ class SettingsDocumentLaunchTest {
         assertTrue(
             launchedFilename
                 .orEmpty()
-                .matches(Regex("personal_scheduler_backup_v1_\\d{8}-\\d{6}\\.json")),
+                .matches(Regex("personal_scheduler_backup_v1_\\d{8}-\\d{6}\\.json\\.pending")),
         )
         assertFalse(unavailable)
     }
@@ -42,6 +42,15 @@ class SettingsDocumentLaunchTest {
         )
 
         assertTrue(unavailable)
+    }
+
+    @Test
+    fun backupStatusUsesVerifiedSizeAndNonTechnicalProviderFailure() {
+        assertEquals("429 KB", backupByteCountLabel(439_266L))
+        assertEquals(
+            "Backup failed: destination stayed empty",
+            manualBackupFailureStatus(IllegalStateException("Backup file was empty after writing")),
+        )
     }
 
     @Test
