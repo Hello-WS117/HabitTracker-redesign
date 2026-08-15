@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.0.90",
-  "versionCode": 1009000,
-  "publishedAt": "2026-08-15T06:56:17Z",
+  "versionName": "1.0.91",
+  "versionCode": 1009100,
+  "publishedAt": "2026-08-15T18:43:17Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.90/HabitTracker-v1.0.90.apk",
-  "apkSha256": "9b58e577b7a364b005304aa6e8c694d051f3fa07b0edd80b607ed1c5ca2967e5",
-  "apkSizeBytes": 13510381,
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.91/HabitTracker-v1.0.91.apk",
+  "apkSha256": "cd7e5a45d1bc76f0641ce233be382dcf7e0b563becad702cf72ce9db782e32a6",
+  "apkSizeBytes": 13510385,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Adds persistent habit pause and unpause controls. Paused habits move into a dedicated collapsed section and remain excluded from Today, reminders, and active scheduling until resumed."
+  "releaseNotes": "Removes the redundant header schedule-progress bar from linked and phased Today cards when the detailed duration-progress panel is already shown."
 }
