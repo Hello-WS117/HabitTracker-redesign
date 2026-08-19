@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.0.92",
-  "versionCode": 1009200,
-  "publishedAt": "2026-08-19T21:37:22Z",
+  "versionName": "1.0.93",
+  "versionCode": 1009300,
+  "publishedAt": "2026-08-19T21:42:26Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.92/HabitTracker-v1.0.92.apk",
-  "apkSha256": "ae02769e4b6faa9e5aa1f732901df5513f277c585a1ef1ea1082cc687daf9318",
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.93/HabitTracker-v1.0.93.apk",
+  "apkSha256": "14dd005147bf9c6bc0dbfe4b524355cd16f33bb7b15d44c054ccc01bfd1dc0d4",
   "apkSizeBytes": 13510385,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Fixes linked phase session quotas. Daily 14-session phases such as O2 tables remain active until all required sessions are completed, and existing damaged schedules repair automatically."
+  "releaseNotes": "Calendar pushed occurrences are now labeled Pushed instead of Partial and use a brighter golden yellow that is clearly distinct from completed green."
 }
