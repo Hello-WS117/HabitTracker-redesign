@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.0.95",
-  "versionCode": 1009500,
-  "publishedAt": "2026-08-20T03:26:23Z",
+  "versionName": "1.0.96",
+  "versionCode": 1009600,
+  "publishedAt": "2026-08-20T03:48:15Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.95/HabitTracker-v1.0.95.apk",
-  "apkSha256": "b54b18f2d83b8ed3c31e4aa3103bf16955a8cb19698943f07757e7aab6e677e1",
-  "apkSizeBytes": 13526769,
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.96/HabitTracker-v1.0.96.apk",
+  "apkSha256": "f8d6fd29c7bfeda119a634218abd7f9060fba4340d7a8b73eb5e7877c186b97a",
+  "apkSizeBytes": 13559537,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Stats now includes 7-, 30-, and 90-day presets, year-to-date filtering, and custom start/end calendar dates while preserving the existing Default view."
+  "releaseNotes": "Settings now includes Schedule Health for upcoming-date checks and history-preserving repairs, plus Backup Health for local safety-copy validation, folder access, verified size, and recent backup results."
 }
