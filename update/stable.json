@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.0.93",
-  "versionCode": 1009300,
-  "publishedAt": "2026-08-19T21:42:26Z",
+  "versionName": "1.0.94",
+  "versionCode": 1009400,
+  "publishedAt": "2026-08-20T01:11:36Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.93/HabitTracker-v1.0.93.apk",
-  "apkSha256": "14dd005147bf9c6bc0dbfe4b524355cd16f33bb7b15d44c054ccc01bfd1dc0d4",
-  "apkSizeBytes": 13510385,
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.94/HabitTracker-v1.0.94.apk",
+  "apkSha256": "515cb9843f24f843bcd5928c7b3a79280ab2d001ba86378de1b5533e0afa5b01",
+  "apkSizeBytes": 13526769,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Calendar pushed occurrences are now labeled Pushed instead of Partial and use a brighter golden yellow that is clearly distinct from completed green."
+  "releaseNotes": "Variable schedules can now use an indefinite final stage that keeps its cadence active with no end date and displays as ongoing throughout the app."
 }

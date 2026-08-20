@@ -23,4 +23,4 @@ Application source code, signing keys, credentials, personal habit data, and bac
 
 ## Current Stable Release
 
-The current stable release is `v1.0.93`. Its package, checksum, signer identity, and download URL are recorded in [`update/stable.json`](update/stable.json).
+The current stable release is `v1.0.94`. Its package, checksum, signer identity, and download URL are recorded in [`update/stable.json`](update/stable.json).
