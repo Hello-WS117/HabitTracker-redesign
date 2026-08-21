@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.0.96",
-  "versionCode": 1009600,
-  "publishedAt": "2026-08-20T03:48:15Z",
+  "versionName": "1.0.97",
+  "versionCode": 1009700,
+  "publishedAt": "2026-08-21T05:10:08Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.96/HabitTracker-v1.0.96.apk",
-  "apkSha256": "f8d6fd29c7bfeda119a634218abd7f9060fba4340d7a8b73eb5e7877c186b97a",
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.97/HabitTracker-v1.0.97.apk",
+  "apkSha256": "d12e91f8e827c2054a20e101119a61755a28b269842bb3c58c07495596489ca0",
   "apkSizeBytes": 13559537,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Settings now includes Schedule Health for upcoming-date checks and history-preserving repairs, plus Backup Health for local safety-copy validation, folder access, verified size, and recent backup results."
+  "releaseNotes": "Individual-habit Stats now uses one compact date-range button and one tappable habit header instead of horizontally scrolling filter rows. The default is labeled All time and custom ranges show their dates."
 }
