@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.0.98",
-  "versionCode": 1009800,
-  "publishedAt": "2026-08-21T05:29:19Z",
+  "versionName": "1.0.99",
+  "versionCode": 1009900,
+  "publishedAt": "2026-08-26T02:53:38Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.98/HabitTracker-v1.0.98.apk",
-  "apkSha256": "d4d8885f4fed891d99255b78728204302cf9cee40eed2e4b707dbf70e3985a5b",
-  "apkSizeBytes": 13559537,
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.0.99/HabitTracker-v1.0.99.apk",
+  "apkSha256": "96a5000c5960f80b2d65832fa51b48ef26be557f30ea1e6bf9e55e1d106d3cb3",
+  "apkSizeBytes": 13559601,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Selecting a long-term task in Calendar now shows its next five pending scheduled occurrences at the bottom of the page."
+  "releaseNotes": "Countdown timers can now speak any number of custom remaining-time alerts, such as 30 seconds and 10 seconds."
 }
