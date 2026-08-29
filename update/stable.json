@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.1.0",
-  "versionCode": 1010000,
-  "publishedAt": "2026-08-29T02:12:16Z",
+  "versionName": "1.1.1",
+  "versionCode": 1010100,
+  "publishedAt": "2026-08-29T02:27:17Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.0/HabitTracker-v1.1.0.apk",
-  "apkSha256": "cbd616d2840acfe614f45803fc6382d18556343047aa82e13774d552abbc83d8",
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.1/HabitTracker-v1.1.1.apk",
+  "apkSha256": "3c69b22314204e83c2e8e4186d0fcf04fba73bde36199cbf032fe32b80db0194",
   "apkSizeBytes": 13575981,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Tracked-habit Stats now shows percent improvement since the first result and during the current 30-day window directly below the existing graph."
+  "releaseNotes": "Tracked-habit Stats keeps the existing progress graph unchanged and moves Since start and Last 30 days into a separate card below it."
 }
