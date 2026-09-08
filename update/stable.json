@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.1.1",
-  "versionCode": 1010100,
-  "publishedAt": "2026-08-29T02:27:17Z",
+  "versionName": "1.1.2",
+  "versionCode": 1010200,
+  "publishedAt": "2026-09-08T20:24:43Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.1/HabitTracker-v1.1.1.apk",
-  "apkSha256": "3c69b22314204e83c2e8e4186d0fcf04fba73bde36199cbf032fe32b80db0194",
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.2/HabitTracker-v1.1.2.apk",
+  "apkSha256": "b54f841729c1e8bc9f9738e456f03629b469108b238e686238cade4c2b222efe",
   "apkSizeBytes": 13575981,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Tracked-habit Stats keeps the existing progress graph unchanged and moves Since start and Last 30 days into a separate card below it."
+  "releaseNotes": "Reliability fixes for recurring schedules, pushed progress records, backup rollback and history, simultaneous reminders, notification timer Stop, midnight maintenance, and saved settings. The existing Stats graph and separate improvement card are unchanged."
 }
