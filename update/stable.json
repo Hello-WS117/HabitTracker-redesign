@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.1.2",
-  "versionCode": 1010200,
-  "publishedAt": "2026-09-08T20:24:43Z",
+  "versionName": "1.1.4",
+  "versionCode": 1010400,
+  "publishedAt": "2026-09-16T04:35:52Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.2/HabitTracker-v1.1.2.apk",
-  "apkSha256": "b54f841729c1e8bc9f9738e456f03629b469108b238e686238cade4c2b222efe",
-  "apkSizeBytes": 13575981,
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.4/HabitTracker-v1.1.4.apk",
+  "apkSha256": "48cf0c3579e788eef432b3f4a58d22e5a27f73def8450900831e152f998c27e6",
+  "apkSizeBytes": 13592365,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Reliability fixes for recurring schedules, pushed progress records, backup rollback and history, simultaneous reminders, notification timer Stop, midnight maintenance, and saved settings. The existing Stats graph and separate improvement card are unchanged."
+  "releaseNotes": "Stats now shows Since last, Since start, and Last 30 days with matching percentage, signed unit change, and baseline-to-latest values below the unchanged graph. Includes the Done yesterday fix for pushed sequence sessions, preserving recorded history and advancing to the next workout."
 }
