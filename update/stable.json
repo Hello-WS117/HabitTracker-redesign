@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.1.6",
-  "versionCode": 1010600,
-  "publishedAt": "2026-09-23T19:23:08Z",
+  "versionName": "1.1.7",
+  "versionCode": 1010700,
+  "publishedAt": "2026-09-24T04:17:00Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.6/HabitTracker-v1.1.6.apk",
-  "apkSha256": "da525fc1132b6d4997385923cbb0ccbbf3970e2d121301128f2e930c1c9e674a",
-  "apkSizeBytes": 13625137,
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.7/HabitTracker-v1.1.7.apk",
+  "apkSha256": "7adf31f281864916f05d1480b3b5ce1feb9f6afaeddc528354156c8d7583d5a1",
+  "apkSizeBytes": 13625133,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Tallies are a separate count-only task type with optional fixed seconds per entry. Today supports +1 and undo; Stats shows count, time trends, totals, and history. Older tasks, history, and backups are preserved."
+  "releaseNotes": "Fixes undo of a pushed sequence after earlier shifts without colliding with recorded history. Notes, progress, checks, logs, and completed records are preserved; ambiguous stale undo leaves the route unchanged."
 }
