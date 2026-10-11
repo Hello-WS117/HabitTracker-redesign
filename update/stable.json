@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.1.8",
-  "versionCode": 1010800,
-  "publishedAt": "2026-09-24T22:37:00Z",
+  "versionName": "1.1.10",
+  "versionCode": 1011000,
+  "publishedAt": "2026-10-11T21:44:21Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.8/HabitTracker-v1.1.8.apk",
-  "apkSha256": "47959e1782a3229e1a20fdcfc30e670e679cfd5f109f9672d54d75763162912e",
-  "apkSizeBytes": 13657901,
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.10/HabitTracker-v1.1.10.apk",
+  "apkSha256": "b40efe404a84a3a2d5d31962a3d55ef56e956cf11009f55b3a50eda6e8efe2d5",
+  "apkSizeBytes": 13674285,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Edit existing phased routines with a prefilled structured plan and field-level preview while retaining active progress and recorded history."
+  "releaseNotes": "Resume completed phased routines from a visible button with an explicit phase/day choice. Separate completed routines from paused habits and preserve recorded history, notes, checks, and progress when rebuilding dates."
 }
