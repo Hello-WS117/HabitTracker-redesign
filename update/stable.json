@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.1.10",
-  "versionCode": 1011000,
-  "publishedAt": "2026-10-11T21:44:21Z",
+  "versionName": "1.2.0",
+  "versionCode": 1020000,
+  "publishedAt": "2026-10-26T21:08:29Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.1.10/HabitTracker-v1.1.10.apk",
-  "apkSha256": "b40efe404a84a3a2d5d31962a3d55ef56e956cf11009f55b3a50eda6e8efe2d5",
-  "apkSizeBytes": 13674285,
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.2.0/HabitTracker-v1.2.0.apk",
+  "apkSha256": "50dde69f465007b5127cfc775b5f542ff97dc50ffb79d04a6fe2e24d2cb9bdb4",
+  "apkSizeBytes": 13741809,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Resume completed phased routines from a visible button with an explicit phase/day choice. Separate completed routines from paused habits and preserve recorded history, notes, checks, and progress when rebuilding dates."
+  "releaseNotes": "Add optional app and Chrome website blocking until today’s checklist is resolved. Complete, Skip, and Push unlock access; Undo or new daily items re-lock it. Long-term tasks and tallies are excluded. Whole-app fallback covers unsupported browsers and detected embedded WebViews."
 }
