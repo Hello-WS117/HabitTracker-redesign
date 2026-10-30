@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "channel": "stable",
   "packageName": "com.example.habittracker.fieldjournal",
-  "versionName": "1.2.0",
-  "versionCode": 1020000,
-  "publishedAt": "2026-10-26T21:08:29Z",
+  "versionName": "1.2.3",
+  "versionCode": 1020300,
+  "publishedAt": "2026-10-30T08:52:57Z",
   "minimumAndroidSdk": 26,
   "requiredBackupSchemaVersion": 1,
-  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.2.0/HabitTracker-v1.2.0.apk",
-  "apkSha256": "50dde69f465007b5127cfc775b5f542ff97dc50ffb79d04a6fe2e24d2cb9bdb4",
-  "apkSizeBytes": 13741809,
+  "apkUrl": "https://github.com/Hello-WS117/HabitTracker-redesign/releases/download/v1.2.3/HabitTracker-v1.2.3.apk",
+  "apkSha256": "967c9d6ac09f228f49494c239029f521abdfe3cb09348d5ddee807c1e34cf43f",
+  "apkSizeBytes": 13758193,
   "signerCertificateSha256": "023898cfdfe985cebd795bed6a1405dfe2f05b2cc523a4e7a7d4d332bf70d56a",
-  "releaseNotes": "Add optional app and Chrome website blocking until today’s checklist is resolved. Complete, Skip, and Push unlock access; Undo or new daily items re-lock it. Long-term tasks and tallies are excluded. Whole-app fallback covers unsupported browsers and detected embedded WebViews."
+  "releaseNotes": "Preserve future notes and recorded sessions during schedule edits; reject circular Start after links; advance routine phases in the background; use elapsed-time workout timers. Includes the daily cardio break and narrower browser fallback. Pixel checks were deferred by the owner."
 }
